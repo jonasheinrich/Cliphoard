@@ -1,18 +1,11 @@
 import Foundation
 import SQLite3
 
-/// Creates and opens the per-user history database, ready to use.
-///
-/// The database lives in the user's Application Support directory, so every
-/// macOS user gets their own history, protected by normal file permissions.
-/// (If the app is ever sandboxed, the same API resolves to the container.)
 nonisolated enum DatabaseCreator {
     struct CreatorError: Error, CustomStringConvertible {
         let description: String
     }
 
-    /// `~/Library/Application Support/<bundle id>/history.sqlite`, creating the
-    /// directory (owner-only) if needed.
     static func defaultURL() throws -> URL {
         let fileManager = FileManager.default
         let base = try fileManager.url(
@@ -31,17 +24,12 @@ nonisolated enum DatabaseCreator {
         return directory.appendingPathComponent("history.sqlite")
     }
 
-    /// Opens (or creates) the database at `url` and applies pending schema
-    /// migrations: the bundled `Migrations/*.sql` files unless `migrations`
-    /// is given (tests pass the source folder's files).
-    ///
-    /// The caller owns the returned connection and must close it with
-    /// `sqlite3_close`; `ClipboardStore` does that when it's released.
+    /// Caller owns the returned connection.
     static func open(at url: URL, migrations: [Migration]? = nil) throws -> OpaquePointer {
         let migrator = try Migrator(migrations ?? Migration.bundled())
 
-        // Create the file ourselves so it starts out owner-only. SQLite gives
-        // its -wal/-shm side files the same permissions as the main file.
+        // Created up front so it's owner-only; SQLite copies these permissions
+        // to -wal/-shm.
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: url.path) {
             fileManager.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])

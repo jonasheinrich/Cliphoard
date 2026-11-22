@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Full view of one clipboard item, opened by clicking a row in the history.
-///
-/// Keyboard: ← (or h) goes back to the list, C copies the item.
 struct ClipboardItemDetailView: View {
     let item: ClipboardItem
     var onCopy: () -> Void = {}

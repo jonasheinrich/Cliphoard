@@ -1,20 +1,10 @@
 import AppKit
 import Observation
 
-/// Watches the system clipboard and keeps the clipboard history.
-///
-/// macOS has no clipboard-change notification, so we poll
-/// `NSPasteboard.changeCount`, a cheap counter that increments on every copy.
-/// We only read the contents when that counter changes.
-///
-/// New items are saved to the `ClipboardStore` and put on top of `items` if
-/// they match the active filter. Older history is loaded from the store page
-/// by page via `loadMore()`.
+/// macOS has no clipboard-change notification, so we poll `changeCount`.
 @Observable
 final class ClipboardMonitor: ClipboardMonitoring {
-    /// How often the clipboard's change counter is checked.
     static let pollInterval: Duration = .milliseconds(100)
-    /// How many items are fetched from the database at a time.
     static let pageSize = 100
 
     private(set) var items: [ClipboardItem] = []
@@ -23,17 +13,13 @@ final class ClipboardMonitor: ClipboardMonitoring {
     private(set) var apps: [SourceApp] = []
 
     private let pasteboard: NSPasteboard
-    /// `nil` if the database couldn't be opened; items then live in memory only.
     private let store: ClipboardStore?
     private var lastChangeCount: Int
     private var pollTask: Task<Void, Never>?
-    /// Text of the newest history entry, regardless of the filter. Used to
-    /// skip storing the same text twice in a row.
+    /// Newest text regardless of the filter, for skipping repeats.
     private var latestText: String?
-    /// Items kept in memory because there is no database.
     private var unsavedItems: [ClipboardItem] = []
-    /// Ids for items that couldn't be saved, so the list can still tell them
-    /// apart. Negative, so they never clash with database ids.
+    /// Negative, so they never clash with database ids.
     private var nextUnsavedID: Int64 = -1
 
     init(pasteboard: NSPasteboard = .general, store: ClipboardStore? = nil) {
@@ -117,17 +103,15 @@ final class ClipboardMonitor: ClipboardMonitoring {
         let isFirstCheck = lastChangeCount == -1
         lastChangeCount = changeCount
 
-        // Text only for now; images, files etc. are ignored.
         guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
 
-        // Don't store the same text twice in a row. This also prevents a new
-        // row on every launch when the clipboard still holds the last item.
+        // Also avoids a new row on every launch while the clipboard is
+        // unchanged.
         guard text != latestText else { return }
 
-        // macOS doesn't record which app wrote to the clipboard, so we use the
-        // frontmost app at the moment we notice the change as a best guess.
-        // On the first check the text was copied before we were running, so
-        // the frontmost app says nothing about where it came from.
+        // macOS doesn't record the clipboard's source app, so we guess the
+        // frontmost one. On the first check the text predates our launch, so
+        // there's no guess.
         let app = isFirstCheck ? nil : NSWorkspace.shared.frontmostApplication
         record(ClipboardItem(
             text: text,
@@ -137,8 +121,6 @@ final class ClipboardMonitor: ClipboardMonitoring {
         ))
     }
 
-    /// Saves a new item and puts it on top of the history if it matches the
-    /// filter.
     private func record(_ newItem: ClipboardItem) {
         var item = newItem
         do {
@@ -159,7 +141,6 @@ final class ClipboardMonitor: ClipboardMonitoring {
         }
     }
 
-    /// Keeps `apps` up to date without re-querying the database.
     private func countForSourceApp(_ item: ClipboardItem) {
         if let index = apps.firstIndex(where: { $0.bundleID == item.sourceBundleID }) {
             apps[index].itemCount += 1

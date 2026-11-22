@@ -1,16 +1,11 @@
 import SwiftUI
 
-/// One clipboard entry in the history list: text (capped at a few lines) on
-/// the left, source app and time on the right, inside a rounded grey box.
 struct ClipboardItemRow: View {
     let item: ClipboardItem
-    /// Highlighted as the keyboard selection.
     var isSelected = false
-    /// Briefly true after the item was copied, for button feedback.
     var isCopied = false
     var onCopy: () -> Void = {}
 
-    /// Longer text is cut off with "…"; the detail page shows all of it.
     static let maxLines = 4
 
     @State private var isHovered = false
@@ -23,7 +18,6 @@ struct ClipboardItemRow: View {
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // At the end of the text column, before the app/time column.
             CopyButton(isCopied: isCopied, action: onCopy)
                 .buttonStyle(.borderless)
 
@@ -52,7 +46,6 @@ struct ClipboardItemRow: View {
                 }
             }
         }
-        // Make the whole box clickable, not just the text.
         .contentShape(.rect(cornerRadius: 6))
         .onHover { isHovered = $0 }
     }

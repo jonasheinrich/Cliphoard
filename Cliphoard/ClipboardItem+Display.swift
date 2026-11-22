@@ -1,15 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// Formatting and lookups shared by the list rows and the detail page.
 enum ItemDisplay {
-    /// e.g. `2026-11-22 14:03:07.123 UTC`
     static func utcTimestamp(_ date: Date) -> String {
         utcFormatter.string(from: date)
     }
 
-    /// Minute granularity: "Just now" for the first minute, then "1 minute ago",
-    /// "2 hours ago", etc. Seconds never show up.
     static func relativeTime(_ date: Date, now: Date) -> String {
         let elapsed = now.timeIntervalSince(date)
         guard elapsed >= 60 else { return "Just now" }
@@ -20,7 +16,6 @@ enum ItemDisplay {
         )
     }
 
-    /// Icon of the app the item was copied from, if it's still installed.
     static func appIcon(for item: ClipboardItem) -> NSImage? {
         guard let bundleID = item.sourceBundleID,
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
@@ -44,8 +39,7 @@ enum ItemDisplay {
     }()
 }
 
-/// Relative copy time that updates once a minute, counted from the copy time,
-/// so the label changes exactly when another full minute has passed.
+/// Ticks once a minute, counted from the copy time.
 struct RelativeTimeText: View {
     let date: Date
 
@@ -56,7 +50,6 @@ struct RelativeTimeText: View {
     }
 }
 
-/// The source app's icon, or nothing if unknown.
 struct AppIconView: View {
     let item: ClipboardItem
     var size: CGFloat = 16
@@ -70,7 +63,6 @@ struct AppIconView: View {
     }
 }
 
-/// Copy-to-clipboard button. Shows a checkmark while `isCopied` is true.
 struct CopyButton: View {
     let isCopied: Bool
     let action: () -> Void
@@ -91,12 +83,9 @@ struct CopyButton: View {
 }
 
 extension KeyPress {
-    /// True when no command/control/option key is held, so plain letter
-    /// shortcuts don't fire on e.g. ⌘C.
     var hasNoCommandModifiers: Bool {
         modifiers.intersection([.command, .control, .option]).isEmpty
     }
 }
 
-/// How long the copy button shows its checkmark.
 let copyFeedbackDuration: Duration = .seconds(1.5)

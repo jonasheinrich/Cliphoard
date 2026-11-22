@@ -1,40 +1,22 @@
 import SwiftUI
 import AppKit
 
-/// The clipboard history, newest first. Clicking an item opens its detail page.
-///
-/// The filter bar above the list searches the text and narrows the history to
-/// one app and/or a timeframe.
-///
-/// Keyboard: ↑/↓ (or k/j) move the selection, ↩ or → (or l) opens it, C copies
-/// it, Esc clears it. With nothing selected, ↓ starts at the topmost visible
-/// row and ↑ at the bottommost. ↩ or Tab in the search field jumps to the
-/// first result.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
-    /// Fetch the next page when a row this close to the end appears, so new
-    /// items are usually ready before the user reaches the bottom.
     private static let prefetchDistance = 20
 
     @State private var path: [ClipboardItem] = []
-    /// Keyboard selection; `nil` means nothing is selected.
     @State private var selectedID: Int64?
-    /// Rows at least half on screen, used to pick where keyboard navigation
-    /// starts when nothing is selected.
     @State private var visibleIDs: Set<Int64> = []
     @FocusState private var isListFocused: Bool
-    /// Item whose copy button currently shows the "copied" checkmark.
     @State private var copiedID: Int64?
 
-    // Filter bar state, turned into a `ClipboardFilter` by `applyFilter()`.
     @State private var searchText = ""
     @State private var appFilter: AppFilter = .all
     @State private var timeframe: Timeframe = .anyTime
-    /// Wait this long after the last keystroke before searching.
     private static let searchDelay: Duration = .milliseconds(200)
     @FocusState private var isSearchFocused: Bool
-    /// Catches Tab in the search field; see `installTabMonitor()`.
     @State private var tabMonitor: Any?
 
     var body: some View {
@@ -68,11 +50,9 @@ struct ContentView: View {
             }
             .navigationTitle("Clipboard History")
             .toolbar {
-                // Mirrors the detail page's back button in the same spot, so
-                // the toolbar keeps its height and layout when navigating.
+                // Same spot and size as the detail page's back button, so the
+                // toolbar height doesn't jump between pages.
                 ToolbarItem(placement: .navigation) {
-                    // Square frame so the glass background becomes a circle
-                    // the size of the back button instead of a narrow pill.
                     Image(systemName: "doc.on.clipboard")
                         .frame(width: 32, height: 32)
                         .accessibilityHidden(true)
@@ -83,11 +63,9 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 300)
-        // Back on the list: take keyboard focus again so the arrows work.
         .onChange(of: path) {
             if path.isEmpty { isListFocused = true }
         }
-        // Debounce typing; restarted (and the old wait cancelled) per keystroke.
         .task(id: searchText) {
             try? await Task.sleep(for: Self.searchDelay)
             guard !Task.isCancelled else { return }
@@ -102,10 +80,8 @@ struct ContentView: View {
         .onDisappear(perform: removeTabMonitor)
     }
 
-    /// Tab (not Shift-Tab) in the search field jumps to the first result,
-    /// like ↩, instead of moving to the next control. A local event monitor
-    /// is needed because the text field's editor consumes Tab before
-    /// SwiftUI's `onKeyPress` sees it.
+    /// The text field consumes Tab before `onKeyPress` sees it, hence the event
+    /// monitor.
     private func installTabMonitor() {
         guard tabMonitor == nil else { return }
         tabMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -133,8 +109,6 @@ struct ContentView: View {
         ))
     }
 
-    /// ↩ or Tab in the search field: apply the search now and select the first
-    /// result.
     private func focusFirstResult() {
         applyFilter()
         selectedID = monitor.items.first?.id
@@ -144,7 +118,6 @@ struct ContentView: View {
     private var history: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                // Lazy: only rows on (or near) the screen are created.
                 LazyVStack(spacing: 6) {
                     ForEach(Array(monitor.items.enumerated()), id: \.element.id) { index, item in
                         // A tap gesture rather than a Button, so the row's own
@@ -185,7 +158,6 @@ struct ContentView: View {
             .focusEffectDisabled()
             .focused($isListFocused)
             .onAppear { isListFocused = true }
-            // Vim-style letters work like the arrows: j ↓, k ↑, l →.
             .onKeyPress(keys: [.downArrow, "j"]) { press in
                 guard press.hasNoCommandModifiers else { return .ignored }
                 return moveSelection(by: 1, proxy: proxy)
@@ -235,16 +207,13 @@ struct ContentView: View {
         if let current = selectedIndex {
             newIndex = min(max(current + offset, 0), items.count - 1)
         } else if offset > 0 {
-            // Nothing selected, ↓: start at the top of the screen.
             newIndex = items.firstIndex(where: isVisible) ?? 0
         } else {
-            // Nothing selected, ↑: start at the bottom of the screen.
             newIndex = items.lastIndex(where: isVisible) ?? 0
         }
 
         let id = items[newIndex].id
         selectedID = id
-        // No anchor: scroll only as far as needed to show the row.
         proxy.scrollTo(id)
         return .handled
     }

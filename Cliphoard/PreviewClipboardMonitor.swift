@@ -2,9 +2,6 @@
 import Foundation
 import Observation
 
-/// A monitor with fixed data for SwiftUI previews. It never touches the
-/// real clipboard or database, but filters and pages through its samples
-/// like the real monitor does, so both can be tried in the canvas.
 @Observable
 final class PreviewClipboardMonitor: ClipboardMonitoring {
     private(set) var items: [ClipboardItem] = []
@@ -45,7 +42,6 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
         loadMore()
     }
 
-    /// Only simulates the history entry; the real clipboard is left alone.
     func copy(_ item: ClipboardItem) {
         guard item.text != allItems.first?.text else { return }
         let nextID = (allItems.compactMap(\.id).max() ?? 0) + 1
@@ -62,8 +58,6 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
 }
 
 extension ClipboardItem {
-    /// `count` items, newest first: a few hand-written ones covering the
-    /// interesting cases, then generated filler spaced 7 minutes apart.
     static func samples(count: Int) -> [ClipboardItem] {
         let now = Date.now
         let handWritten: [(String, TimeInterval, String?, String?)] = [

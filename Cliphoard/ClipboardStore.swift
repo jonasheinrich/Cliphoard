@@ -1,13 +1,6 @@
 import Foundation
 import SQLite3
 
-/// Reads and writes clipboard items in the history database.
-///
-/// Gets an already opened and migrated connection from `DatabaseCreator`;
-/// creating the database happens at app startup (see `CliphoardApp`).
-///
-/// Not thread-safe by design: the owner (the main-actor `ClipboardMonitor`)
-/// serializes all access.
 nonisolated final class ClipboardStore {
     enum StoreError: Error, CustomStringConvertible {
         case sqlite(String)
@@ -21,7 +14,7 @@ nonisolated final class ClipboardStore {
 
     private let db: OpaquePointer
 
-    /// Takes ownership of `db` and closes it when the store is released.
+    /// Takes ownership of `db` and closes it on deinit.
     init(db: OpaquePointer) {
         self.db = db
     }
@@ -32,7 +25,6 @@ nonisolated final class ClipboardStore {
 
     // MARK: - Queries
 
-    /// Saves `item` and returns it with its new database `id`.
     @discardableResult
     func insert(_ item: ClipboardItem) throws -> ClipboardItem {
         let statement = try prepare("""
@@ -53,13 +45,8 @@ nonisolated final class ClipboardStore {
         return saved
     }
 
-    /// Items matching `filter`, newest first, starting after `cursor`
-    /// (exclusive), at most `limit`.
-    ///
-    /// Uses keyset pagination: the next page continues from the last item
-    /// already loaded rather than from a row offset, so items copied in the
-    /// meantime don't shift pages or cause duplicates. Pass `nil` for the
-    /// first page.
+    /// Keyset pagination: continues after `cursor`, so new items don't shift
+    /// pages.
     func items(
         matching filter: ClipboardFilter = ClipboardFilter(),
         before cursor: ClipboardItem? = nil,
@@ -69,8 +56,6 @@ nonisolated final class ClipboardStore {
         var values: [SQLValue] = []
 
         if !filter.text.isEmpty {
-            // LIKE is case-insensitive for ASCII. A leading % means a full
-            // scan, which is fine for a personal clipboard history.
             conditions.append(#"text LIKE ? ESCAPE '\'"#)
             values.append(.text("%\(Self.escapeLike(filter.text))%"))
         }
@@ -115,7 +100,6 @@ nonisolated final class ClipboardStore {
         }
     }
 
-    /// Every app items were copied from, with item counts, in display order.
     func sourceApps() throws -> [SourceApp] {
         // With a single MAX() aggregate, SQLite takes the other bare columns
         // from the row holding the maximum, so each app gets its latest name.
@@ -144,7 +128,6 @@ nonisolated final class ClipboardStore {
         }
     }
 
-    /// Escapes LIKE wildcards so the search text matches literally.
     private static func escapeLike(_ text: String) -> String {
         text.replacingOccurrences(of: #"\"#, with: #"\\"#)
             .replacingOccurrences(of: "%", with: #"\%"#)
@@ -161,7 +144,7 @@ nonisolated final class ClipboardStore {
         return statement
     }
 
-    /// Tells SQLite to copy bound strings, since Swift's buffers are temporary.
+    /// SQLITE_TRANSIENT: SQLite copies the string.
     private var transient: sqlite3_destructor_type {
         unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     }
@@ -172,7 +155,6 @@ nonisolated final class ClipboardStore {
         case int(Int64)
     }
 
-    /// Binds `values` to the statement's `?` placeholders, in order.
     private func bind(_ values: [SQLValue], in statement: OpaquePointer) {
         for (offset, value) in values.enumerated() {
             let index = Int32(offset + 1)

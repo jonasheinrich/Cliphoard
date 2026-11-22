@@ -12,9 +12,6 @@ struct CliphoardApp: App {
         .windowToolbarStyle(.unified)
     }
 
-    /// Creates or opens the per-user history database (including schema
-    /// migrations) and hands it to the store. On failure the app still runs,
-    /// keeping items in memory only.
     private static func openStore() -> ClipboardStore? {
         do {
             let url = try DatabaseCreator.defaultURL()

@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// Search field, app picker and timeframe picker shown above the history.
 struct FilterBar: View {
     @Binding var searchText: String
     @Binding var app: AppFilter
     @Binding var timeframe: Timeframe
-    /// Apps to offer in the picker.
     let apps: [SourceApp]
-    /// Whether the search field has keyboard focus.
     var searchFocus: FocusState<Bool>.Binding
-    /// Called when ↩ is pressed in the search field.
     var onSubmitSearch: () -> Void = {}
 
     private var isActive: Bool {
@@ -63,7 +59,6 @@ struct FilterBar: View {
             .fixedSize()
             .help("Only items copied in this timeframe")
 
-            // Always shown so the bar doesn't shift; disabled without filters.
             Button("Clear") {
                 searchText = ""
                 app = .all
