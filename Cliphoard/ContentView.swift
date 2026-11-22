@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
-    let monitor: ClipboardMonitor
+    let monitor: any ClipboardMonitoring
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -113,6 +113,24 @@ private struct ItemMetadataView: View {
     }
 }
 
-#Preview {
-    ContentView(monitor: ClipboardMonitor())
+#if DEBUG
+#Preview("Short text") {
+    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleShort))
 }
+
+#Preview("Code") {
+    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleCode))
+}
+
+#Preview("Long text") {
+    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleLong))
+}
+
+#Preview("Unknown app") {
+    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleUnknownApp))
+}
+
+#Preview("Empty") {
+    ContentView(monitor: PreviewClipboardMonitor(latestItem: nil))
+}
+#endif

@@ -7,7 +7,7 @@ import Observation
 /// `NSPasteboard.changeCount`, a cheap counter that increments on every copy.
 /// We only read the contents when that counter changes.
 @Observable
-final class ClipboardMonitor {
+final class ClipboardMonitor: ClipboardMonitoring {
     /// How often the clipboard's change counter is checked.
     static let pollInterval: Duration = .milliseconds(100)
 
