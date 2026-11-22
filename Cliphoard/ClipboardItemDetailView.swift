@@ -2,12 +2,14 @@ import SwiftUI
 
 /// Full view of one clipboard item, opened by clicking a row in the history.
 ///
-/// Keyboard: ← goes back to the list.
+/// Keyboard: ← goes back to the list, C copies the item.
 struct ClipboardItemDetailView: View {
     let item: ClipboardItem
+    var onCopy: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isFocused: Bool
+    @State private var isCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -44,6 +46,11 @@ struct ClipboardItemDetailView: View {
         }
         .padding()
         .navigationTitle(item.sourceAppName ?? "Clipboard item")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                CopyButton(isCopied: isCopied, action: copy)
+            }
+        }
         // Take keyboard focus on open so ← works right away.
         .focusable()
         .focusEffectDisabled()
@@ -52,6 +59,20 @@ struct ClipboardItemDetailView: View {
         .onKeyPress(.leftArrow) {
             dismiss()
             return .handled
+        }
+        .onKeyPress(keys: ["c"]) { press in
+            guard press.hasNoCommandModifiers else { return .ignored }
+            copy()
+            return .handled
+        }
+    }
+
+    private func copy() {
+        onCopy()
+        isCopied = true
+        Task {
+            try? await Task.sleep(for: copyFeedbackDuration)
+            isCopied = false
         }
     }
 

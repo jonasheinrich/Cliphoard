@@ -6,6 +6,9 @@ struct ClipboardItemRow: View {
     let item: ClipboardItem
     /// Highlighted as the keyboard selection.
     var isSelected = false
+    /// Briefly true after the item was copied, for button feedback.
+    var isCopied = false
+    var onCopy: () -> Void = {}
 
     /// Longer text is cut off with "…"; the detail page shows all of it.
     static let maxLines = 4
@@ -19,6 +22,10 @@ struct ClipboardItemRow: View {
                 .lineLimit(Self.maxLines)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            // At the end of the text column, before the app/time column.
+            CopyButton(isCopied: isCopied, action: onCopy)
+                .buttonStyle(.borderless)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

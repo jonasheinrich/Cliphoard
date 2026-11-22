@@ -2,7 +2,8 @@ import SwiftUI
 
 /// The clipboard history, newest first. Clicking an item opens its detail page.
 ///
-/// Keyboard: ↑/↓ move the selection, ↩ or → opens it, Esc clears it. With nothing
+/// Keyboard: ↑/↓ move the selection, ↩ or → opens it, C copies it, Esc clears
+/// it. With nothing
 /// selected, ↓ starts at the topmost visible row and ↑ at the bottommost.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
@@ -18,6 +19,8 @@ struct ContentView: View {
     /// starts when nothing is selected.
     @State private var visibleIDs: Set<Int64> = []
     @FocusState private var isListFocused: Bool
+    /// Item whose copy button currently shows the "copied" checkmark.
+    @State private var copiedID: Int64?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -45,7 +48,7 @@ struct ContentView: View {
                 }
             }
             .navigationDestination(for: ClipboardItem.self) { item in
-                ClipboardItemDetailView(item: item)
+                ClipboardItemDetailView(item: item) { monitor.copy(item) }
             }
         }
         .frame(minWidth: 400, minHeight: 300)
@@ -61,12 +64,16 @@ struct ContentView: View {
                 // Lazy: only rows on (or near) the screen are created.
                 LazyVStack(spacing: 6) {
                     ForEach(Array(monitor.items.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            open(item)
-                        } label: {
-                            ClipboardItemRow(item: item, isSelected: isSelected(item))
-                        }
-                        .buttonStyle(.plain)
+                        // A tap gesture rather than a Button, so the row's own
+                        // copy button can sit inside it.
+                        ClipboardItemRow(
+                            item: item,
+                            isSelected: isSelected(item),
+                            isCopied: copiedID != nil && item.id == copiedID,
+                            onCopy: { copy(item) }
+                        )
+                        .onTapGesture { open(item) }
+                        .accessibilityAddTraits(.isButton)
                         .onAppear {
                             if index >= monitor.items.count - Self.prefetchDistance {
                                 monitor.loadMore()
@@ -99,6 +106,11 @@ struct ContentView: View {
             .onKeyPress(.upArrow) { moveSelection(by: -1, proxy: proxy) }
             .onKeyPress(.return) { openSelection() }
             .onKeyPress(.rightArrow) { openSelection() }
+            .onKeyPress(keys: ["c"]) { press in
+                guard press.hasNoCommandModifiers, let index = selectedIndex else { return .ignored }
+                copy(monitor.items[index])
+                return .handled
+            }
             .onKeyPress(.escape) {
                 guard selectedID != nil else { return .ignored }
                 selectedID = nil
@@ -148,6 +160,15 @@ struct ContentView: View {
         guard let index = selectedIndex else { return .ignored }
         open(monitor.items[index])
         return .handled
+    }
+
+    private func copy(_ item: ClipboardItem) {
+        monitor.copy(item)
+        copiedID = item.id
+        Task {
+            try? await Task.sleep(for: copyFeedbackDuration)
+            if copiedID == item.id { copiedID = nil }
+        }
     }
 
     private func open(_ item: ClipboardItem) {

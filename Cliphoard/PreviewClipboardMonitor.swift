@@ -24,6 +24,16 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
         items.append(contentsOf: next)
     }
 
+    /// Only simulates the history entry; the real clipboard is left alone.
+    func copy(_ item: ClipboardItem) {
+        guard item.text != items.first?.text else { return }
+        let nextID = (items.compactMap(\.id).max() ?? 0) + 1
+        items.insert(ClipboardItem(
+            id: nextID, text: item.text, copiedAt: .now,
+            sourceAppName: item.sourceAppName, sourceBundleID: item.sourceBundleID
+        ), at: 0)
+    }
+
     func start() {}
     func stop() {}
 }

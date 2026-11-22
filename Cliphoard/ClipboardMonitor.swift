@@ -51,6 +51,22 @@ final class ClipboardMonitor: ClipboardMonitoring {
         pollTask = nil
     }
 
+    func copy(_ item: ClipboardItem) {
+        pasteboard.clearContents()
+        pasteboard.setString(item.text, forType: .string)
+        // Mark our own write as seen, otherwise polling would record it with
+        // Cliphoard (the frontmost app) as the source.
+        lastChangeCount = pasteboard.changeCount
+
+        guard item.text != items.first?.text else { return }
+        record(ClipboardItem(
+            text: item.text,
+            copiedAt: .now,
+            sourceAppName: item.sourceAppName,
+            sourceBundleID: item.sourceBundleID
+        ))
+    }
+
     func loadMore() {
         guard hasMore else { return }
         loadNextPage()
@@ -86,13 +102,17 @@ final class ClipboardMonitor: ClipboardMonitoring {
         // On the first check the text was copied before we were running, so
         // the frontmost app says nothing about where it came from.
         let app = isFirstCheck ? nil : NSWorkspace.shared.frontmostApplication
-        var item = ClipboardItem(
+        record(ClipboardItem(
             text: text,
             copiedAt: .now,
             sourceAppName: app?.localizedName,
             sourceBundleID: app?.bundleIdentifier
-        )
+        ))
+    }
 
+    /// Saves a new item and puts it on top of the history.
+    private func record(_ newItem: ClipboardItem) {
+        var item = newItem
         do {
             if let store { item = try store.insert(item) }
         } catch {

@@ -69,3 +69,34 @@ struct AppIconView: View {
         }
     }
 }
+
+/// Copy-to-clipboard button. Shows a checkmark while `isCopied` is true.
+struct CopyButton: View {
+    let isCopied: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(
+                isCopied ? "Copied" : "Copy",
+                systemImage: isCopied ? "checkmark" : "doc.on.doc"
+            )
+            .imageScale(.large)
+            .labelStyle(.iconOnly)
+            .contentTransition(.symbolEffect(.replace))
+            .frame(width: 16, height: 16)
+        }
+        .help(isCopied ? "Copied" : "Copy to clipboard (C)")
+    }
+}
+
+extension KeyPress {
+    /// True when no command/control/option key is held, so plain letter
+    /// shortcuts don't fire on e.g. ⌘C.
+    var hasNoCommandModifiers: Bool {
+        modifiers.intersection([.command, .control, .option]).isEmpty
+    }
+}
+
+/// How long the copy button shows its checkmark.
+let copyFeedbackDuration: Duration = .seconds(1.5)

@@ -12,6 +12,9 @@ protocol ClipboardMonitoring: AnyObject, Observable {
 
     /// Fetches the next page of older items, if any.
     func loadMore()
+    /// Puts `item`'s text back on the clipboard and records that as a new
+    /// history entry (keeping the original source app).
+    func copy(_ item: ClipboardItem)
     func start()
     func stop()
 }
