@@ -2,9 +2,12 @@ import SwiftUI
 
 /// The clipboard history, newest first. Clicking an item opens its detail page.
 ///
+/// The filter bar above the list searches the text and narrows the history to
+/// one app and/or a timeframe.
+///
 /// Keyboard: ↑/↓ move the selection, ↩ or → opens it, C copies it, Esc clears
-/// it. With nothing
-/// selected, ↓ starts at the topmost visible row and ↑ at the bottommost.
+/// it. With nothing selected, ↓ starts at the topmost visible row and ↑ at the
+/// bottommost. ↩ in the search field jumps to the first result.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
@@ -22,17 +25,39 @@ struct ContentView: View {
     /// Item whose copy button currently shows the "copied" checkmark.
     @State private var copiedID: Int64?
 
+    // Filter bar state, turned into a `ClipboardFilter` by `applyFilter()`.
+    @State private var searchText = ""
+    @State private var appFilter: AppFilter = .all
+    @State private var timeframe: Timeframe = .anyTime
+    /// Wait this long after the last keystroke before searching.
+    private static let searchDelay: Duration = .milliseconds(200)
+
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if monitor.items.isEmpty {
+            VStack(spacing: 0) {
+                FilterBar(
+                    searchText: $searchText,
+                    app: $appFilter,
+                    timeframe: $timeframe,
+                    apps: monitor.apps,
+                    onSubmitSearch: focusFirstResult
+                )
+                .padding([.horizontal, .top])
+
+                if !monitor.items.isEmpty {
+                    history
+                } else if monitor.filter.isActive {
+                    ContentUnavailableView(
+                        "No matching items",
+                        systemImage: "magnifyingglass",
+                        description: Text("Try a different search, app or timeframe.")
+                    )
+                } else {
                     ContentUnavailableView(
                         "No text on the clipboard",
                         systemImage: "doc.on.clipboard",
                         description: Text("Copy some text and it will appear here.")
                     )
-                } else {
-                    history
                 }
             }
             .navigationTitle("Clipboard History")
@@ -56,6 +81,29 @@ struct ContentView: View {
         .onChange(of: path) {
             if path.isEmpty { isListFocused = true }
         }
+        // Debounce typing; restarted (and the old wait cancelled) per keystroke.
+        .task(id: searchText) {
+            try? await Task.sleep(for: Self.searchDelay)
+            guard !Task.isCancelled else { return }
+            applyFilter()
+        }
+        .onChange(of: appFilter) { applyFilter() }
+        .onChange(of: timeframe) { applyFilter() }
+    }
+
+    private func applyFilter() {
+        monitor.setFilter(ClipboardFilter(
+            text: searchText.trimmingCharacters(in: .whitespacesAndNewlines),
+            app: appFilter,
+            since: timeframe.startDate()
+        ))
+    }
+
+    /// ↩ in the search field: apply the search now and select the first result.
+    private func focusFirstResult() {
+        applyFilter()
+        selectedID = monitor.items.first?.id
+        isListFocused = true
     }
 
     private var history: some View {

@@ -3,15 +3,29 @@ import Foundation
 import Observation
 
 /// A monitor with fixed data for SwiftUI previews. It never touches the
-/// real clipboard or database, but pages through its samples like the real
-/// monitor does, so infinite scrolling can be tried in the canvas.
+/// real clipboard or database, but filters and pages through its samples
+/// like the real monitor does, so both can be tried in the canvas.
 @Observable
 final class PreviewClipboardMonitor: ClipboardMonitoring {
     private(set) var items: [ClipboardItem] = []
-    var hasMore: Bool { items.count < allItems.count }
+    private(set) var filter = ClipboardFilter()
+    var hasMore: Bool { items.count < matchingItems.count }
 
-    private let allItems: [ClipboardItem]
+    var apps: [SourceApp] {
+        Dictionary(grouping: allItems, by: \.sourceBundleID)
+            .map { bundleID, items in
+                SourceApp(
+                    bundleID: bundleID,
+                    name: bundleID == nil ? "Unknown app" : (items[0].sourceAppName ?? bundleID!),
+                    itemCount: items.count
+                )
+            }
+            .sorted(by: SourceApp.displayOrder)
+    }
+
+    private var allItems: [ClipboardItem]
     private let pageSize: Int
+    private var matchingItems: [ClipboardItem] { allItems.filter(filter.matches) }
 
     init(items: [ClipboardItem] = ClipboardItem.samples(count: 250), pageSize: Int = 100) {
         self.allItems = items
@@ -20,18 +34,27 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
     }
 
     func loadMore() {
-        let next = allItems.dropFirst(items.count).prefix(pageSize)
+        let next = matchingItems.dropFirst(items.count).prefix(pageSize)
         items.append(contentsOf: next)
+    }
+
+    func setFilter(_ newFilter: ClipboardFilter) {
+        guard newFilter != filter else { return }
+        filter = newFilter
+        items = []
+        loadMore()
     }
 
     /// Only simulates the history entry; the real clipboard is left alone.
     func copy(_ item: ClipboardItem) {
-        guard item.text != items.first?.text else { return }
-        let nextID = (items.compactMap(\.id).max() ?? 0) + 1
-        items.insert(ClipboardItem(
+        guard item.text != allItems.first?.text else { return }
+        let nextID = (allItems.compactMap(\.id).max() ?? 0) + 1
+        let copy = ClipboardItem(
             id: nextID, text: item.text, copiedAt: .now,
             sourceAppName: item.sourceAppName, sourceBundleID: item.sourceBundleID
-        ), at: 0)
+        )
+        allItems.insert(copy, at: 0)
+        if filter.matches(copy) { items.insert(copy, at: 0) }
     }
 
     func start() {}
