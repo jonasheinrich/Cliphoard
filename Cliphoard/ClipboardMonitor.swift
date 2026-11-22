@@ -8,19 +8,20 @@ import Observation
 /// We only read the contents when that counter changes.
 @Observable
 final class ClipboardMonitor {
+    /// How often the clipboard's change counter is checked.
+    static let pollInterval: Duration = .milliseconds(100)
+
     /// The most recent text on the clipboard, or `nil` if it holds no text.
     private(set) var latestText: String?
     /// When `latestText` was last updated.
     private(set) var lastChanged: Date?
 
     private let pasteboard: NSPasteboard
-    private let interval: Duration
     private var lastChangeCount: Int
     private var pollTask: Task<Void, Never>?
 
-    init(pasteboard: NSPasteboard = .general, interval: Duration = .milliseconds(500)) {
+    init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
-        self.interval = interval
         // Start at -1 so the first check always reads the current contents.
         self.lastChangeCount = -1
     }
@@ -30,7 +31,7 @@ final class ClipboardMonitor {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 self?.checkForChanges()
-                try? await Task.sleep(for: self?.interval ?? .milliseconds(500))
+                try? await Task.sleep(for: Self.pollInterval)
             }
         }
     }
