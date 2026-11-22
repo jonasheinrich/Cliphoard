@@ -6,6 +6,9 @@ import Observation
 /// macOS has no clipboard-change notification, so we poll
 /// `NSPasteboard.changeCount`, a cheap counter that increments on every copy.
 /// We only read the contents when that counter changes.
+///
+/// New items are saved to the `ClipboardStore`, and the latest saved item is
+/// shown at launch.
 @Observable
 final class ClipboardMonitor: ClipboardMonitoring {
     /// How often the clipboard's change counter is checked.
@@ -15,13 +18,22 @@ final class ClipboardMonitor: ClipboardMonitoring {
     private(set) var latestItem: ClipboardItem?
 
     private let pasteboard: NSPasteboard
+    /// `nil` if the database couldn't be opened; items then live in memory only.
+    private let store: ClipboardStore?
     private var lastChangeCount: Int
     private var pollTask: Task<Void, Never>?
 
-    init(pasteboard: NSPasteboard = .general) {
+    init(pasteboard: NSPasteboard = .general, store: ClipboardStore? = nil) {
         self.pasteboard = pasteboard
+        self.store = store
         // Start at -1 so the first check always reads the current contents.
         self.lastChangeCount = -1
+
+        do {
+            latestItem = try store?.latest()
+        } catch {
+            print("Could not load the latest clipboard item: \(error)")
+        }
     }
 
     func start() {
@@ -42,18 +54,35 @@ final class ClipboardMonitor: ClipboardMonitoring {
     private func checkForChanges() {
         let changeCount = pasteboard.changeCount
         guard changeCount != lastChangeCount else { return }
+        let isFirstCheck = lastChangeCount == -1
         lastChangeCount = changeCount
 
         // Text only for now; images, files etc. are ignored.
-        guard let text = pasteboard.string(forType: .string) else { return }
+        guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
+
+        // Don't store the same text twice in a row. This also prevents a new
+        // row on every launch when the clipboard still holds the last item.
+        guard text != latestItem?.text else { return }
+
         // macOS doesn't record which app wrote to the clipboard, so we use the
         // frontmost app at the moment we notice the change as a best guess.
-        let app = NSWorkspace.shared.frontmostApplication
-        latestItem = ClipboardItem(
+        // On the first check the text was copied before we were running, so
+        // the frontmost app says nothing about where it came from.
+        let app = isFirstCheck ? nil : NSWorkspace.shared.frontmostApplication
+        var item = ClipboardItem(
             text: text,
             copiedAt: .now,
             sourceAppName: app?.localizedName,
             sourceBundleID: app?.bundleIdentifier
         )
+
+        if let store {
+            do {
+                item = try store.insert(item)
+            } catch {
+                print("Could not save clipboard item: \(error)")
+            }
+        }
+        latestItem = item
     }
 }
