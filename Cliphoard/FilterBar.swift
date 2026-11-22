@@ -7,6 +7,8 @@ struct FilterBar: View {
     @Binding var timeframe: Timeframe
     /// Apps to offer in the picker.
     let apps: [SourceApp]
+    /// Whether the search field has keyboard focus.
+    var searchFocus: FocusState<Bool>.Binding
     /// Called when ↩ is pressed in the search field.
     var onSubmitSearch: () -> Void = {}
 
@@ -21,6 +23,7 @@ struct FilterBar: View {
                     .foregroundStyle(.secondary)
                 TextField("Search", text: $searchText, prompt: Text("Search text"))
                     .textFieldStyle(.plain)
+                    .focused(searchFocus)
                     .onSubmit(onSubmitSearch)
                 if !searchText.isEmpty {
                     Button {

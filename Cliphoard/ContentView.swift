@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The clipboard history, newest first. Clicking an item opens its detail page.
 ///
@@ -7,7 +8,7 @@ import SwiftUI
 ///
 /// Keyboard: ↑/↓ move the selection, ↩ or → opens it, C copies it, Esc clears
 /// it. With nothing selected, ↓ starts at the topmost visible row and ↑ at the
-/// bottommost. ↩ in the search field jumps to the first result.
+/// bottommost. ↩ or Tab in the search field jumps to the first result.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
@@ -31,6 +32,9 @@ struct ContentView: View {
     @State private var timeframe: Timeframe = .anyTime
     /// Wait this long after the last keystroke before searching.
     private static let searchDelay: Duration = .milliseconds(200)
+    @FocusState private var isSearchFocused: Bool
+    /// Catches Tab in the search field; see `installTabMonitor()`.
+    @State private var tabMonitor: Any?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -40,6 +44,7 @@ struct ContentView: View {
                     app: $appFilter,
                     timeframe: $timeframe,
                     apps: monitor.apps,
+                    searchFocus: $isSearchFocused,
                     onSubmitSearch: focusFirstResult
                 )
                 .padding([.horizontal, .top])
@@ -89,6 +94,31 @@ struct ContentView: View {
         }
         .onChange(of: appFilter) { applyFilter() }
         .onChange(of: timeframe) { applyFilter() }
+        .onAppear(perform: installTabMonitor)
+        .onDisappear(perform: removeTabMonitor)
+    }
+
+    /// Tab (not Shift-Tab) in the search field jumps to the first result,
+    /// like ↩, instead of moving to the next control. A local event monitor
+    /// is needed because the text field's editor consumes Tab before
+    /// SwiftUI's `onKeyPress` sees it.
+    private func installTabMonitor() {
+        guard tabMonitor == nil else { return }
+        tabMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let tabKeyCode: UInt16 = 48
+            guard event.keyCode == tabKeyCode,
+                  event.modifierFlags.isDisjoint(with: [.shift, .command, .option, .control]),
+                  isSearchFocused,
+                  !monitor.items.isEmpty
+            else { return event }
+            focusFirstResult()
+            return nil
+        }
+    }
+
+    private func removeTabMonitor() {
+        if let tabMonitor { NSEvent.removeMonitor(tabMonitor) }
+        tabMonitor = nil
     }
 
     private func applyFilter() {
@@ -99,7 +129,8 @@ struct ContentView: View {
         ))
     }
 
-    /// ↩ in the search field: apply the search now and select the first result.
+    /// ↩ or Tab in the search field: apply the search now and select the first
+    /// result.
     private func focusFirstResult() {
         applyFilter()
         selectedID = monitor.items.first?.id
