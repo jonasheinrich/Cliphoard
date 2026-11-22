@@ -6,9 +6,10 @@ import AppKit
 /// The filter bar above the list searches the text and narrows the history to
 /// one app and/or a timeframe.
 ///
-/// Keyboard: ↑/↓ move the selection, ↩ or → opens it, C copies it, Esc clears
-/// it. With nothing selected, ↓ starts at the topmost visible row and ↑ at the
-/// bottommost. ↩ or Tab in the search field jumps to the first result.
+/// Keyboard: ↑/↓ (or k/j) move the selection, ↩ or → (or l) opens it, C copies
+/// it, Esc clears it. With nothing selected, ↓ starts at the topmost visible
+/// row and ↑ at the bottommost. ↩ or Tab in the search field jumps to the
+/// first result.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
@@ -181,10 +182,20 @@ struct ContentView: View {
             .focusEffectDisabled()
             .focused($isListFocused)
             .onAppear { isListFocused = true }
-            .onKeyPress(.downArrow) { moveSelection(by: 1, proxy: proxy) }
-            .onKeyPress(.upArrow) { moveSelection(by: -1, proxy: proxy) }
+            // Vim-style letters work like the arrows: j ↓, k ↑, l →.
+            .onKeyPress(keys: [.downArrow, "j"]) { press in
+                guard press.hasNoCommandModifiers else { return .ignored }
+                return moveSelection(by: 1, proxy: proxy)
+            }
+            .onKeyPress(keys: [.upArrow, "k"]) { press in
+                guard press.hasNoCommandModifiers else { return .ignored }
+                return moveSelection(by: -1, proxy: proxy)
+            }
             .onKeyPress(.return) { openSelection() }
-            .onKeyPress(.rightArrow) { openSelection() }
+            .onKeyPress(keys: [.rightArrow, "l"]) { press in
+                guard press.hasNoCommandModifiers else { return .ignored }
+                return openSelection()
+            }
             .onKeyPress(keys: ["c"]) { press in
                 guard press.hasNoCommandModifiers, let index = selectedIndex else { return .ignored }
                 copy(monitor.items[index])
