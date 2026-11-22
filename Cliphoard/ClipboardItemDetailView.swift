@@ -1,8 +1,13 @@
 import SwiftUI
 
 /// Full view of one clipboard item, opened by clicking a row in the history.
+///
+/// Keyboard: ← goes back to the list.
 struct ClipboardItemDetailView: View {
     let item: ClipboardItem
+
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -39,6 +44,15 @@ struct ClipboardItemDetailView: View {
         }
         .padding()
         .navigationTitle(item.sourceAppName ?? "Clipboard item")
+        // Take keyboard focus on open so ← works right away.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onAppear { isFocused = true }
+        .onKeyPress(.leftArrow) {
+            dismiss()
+            return .handled
+        }
     }
 
     private var summary: String {

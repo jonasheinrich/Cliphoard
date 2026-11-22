@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The clipboard history, newest first. Clicking an item opens its detail page.
 ///
-/// Keyboard: ↑/↓ move the selection, ↩ opens it, Esc clears it. With nothing
+/// Keyboard: ↑/↓ move the selection, ↩ or → opens it, Esc clears it. With nothing
 /// selected, ↓ starts at the topmost visible row and ↑ at the bottommost.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
@@ -98,6 +98,7 @@ struct ContentView: View {
             .onKeyPress(.downArrow) { moveSelection(by: 1, proxy: proxy) }
             .onKeyPress(.upArrow) { moveSelection(by: -1, proxy: proxy) }
             .onKeyPress(.return) { openSelection() }
+            .onKeyPress(.rightArrow) { openSelection() }
             .onKeyPress(.escape) {
                 guard selectedID != nil else { return .ignored }
                 selectedID = nil
