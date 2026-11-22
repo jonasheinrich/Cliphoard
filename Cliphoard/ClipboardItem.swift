@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single text entry captured from the clipboard.
-nonisolated struct ClipboardItem: Equatable, Sendable {
+nonisolated struct ClipboardItem: Hashable, Sendable {
     /// Row id in the database; `nil` until the item has been saved.
     var id: Int64? = nil
     let text: String

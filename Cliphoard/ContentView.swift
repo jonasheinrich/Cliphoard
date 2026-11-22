@@ -1,6 +1,6 @@
 import SwiftUI
-import AppKit
 
+/// The clipboard history, newest first. Clicking an item opens its detail page.
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
@@ -9,125 +9,51 @@ struct ContentView: View {
     private static let prefetchDistance = 20
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Clipboard history")
-                .font(.headline)
+        NavigationStack {
+            Group {
+                if monitor.items.isEmpty {
+                    ContentUnavailableView(
+                        "No text on the clipboard",
+                        systemImage: "doc.on.clipboard",
+                        description: Text("Copy some text and it will appear here.")
+                    )
+                } else {
+                    history
+                }
+            }
+            .navigationTitle("Clipboard History")
+            .navigationDestination(for: ClipboardItem.self) { item in
+                ClipboardItemDetailView(item: item)
+            }
+        }
+        .frame(minWidth: 400, minHeight: 300)
+    }
 
-            if monitor.items.isEmpty {
-                ContentUnavailableView(
-                    "No text on the clipboard",
-                    systemImage: "doc.on.clipboard",
-                    description: Text("Copy some text and it will appear here.")
-                )
-            } else {
-                ScrollView {
-                    // Lazy: only rows on (or near) the screen are created.
-                    LazyVStack(spacing: 6) {
-                        ForEach(Array(monitor.items.enumerated()), id: \.element.id) { index, item in
-                            ClipboardItemRow(item: item)
-                                .onAppear {
-                                    if index >= monitor.items.count - Self.prefetchDistance {
-                                        monitor.loadMore()
-                                    }
-                                }
-                        }
-
-                        if monitor.hasMore {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding()
-                                .onAppear { monitor.loadMore() }
+    private var history: some View {
+        ScrollView {
+            // Lazy: only rows on (or near) the screen are created.
+            LazyVStack(spacing: 6) {
+                ForEach(Array(monitor.items.enumerated()), id: \.element.id) { index, item in
+                    NavigationLink(value: item) {
+                        ClipboardItemRow(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear {
+                        if index >= monitor.items.count - Self.prefetchDistance {
+                            monitor.loadMore()
                         }
                     }
                 }
-            }
-        }
-        .padding()
-        .frame(minWidth: 400, minHeight: 300)
-    }
-}
 
-/// One clipboard entry: text on the left, source app and time on the right,
-/// all inside a rounded grey box.
-struct ClipboardItemRow: View {
-    let item: ClipboardItem
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(item.text)
-                .font(.body.monospaced())
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            ItemMetadataView(item: item)
-                .frame(width: 160, alignment: .leading)
-        }
-        .padding(8)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 6))
-    }
-}
-
-/// Source app and copy time shown in the right-hand column of a row.
-private struct ItemMetadataView: View {
-    let item: ClipboardItem
-
-    private static let utcFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS 'UTC'"
-        return formatter
-    }()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if let icon = appIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .frame(width: 16, height: 16)
+                if monitor.hasMore {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding()
+                        .onAppear { monitor.loadMore() }
                 }
-                Text(item.sourceAppName ?? "Unknown app")
-                    .lineLimit(1)
-                    .truncationMode(.tail)
             }
-
-            // Re-render once a minute, counted from the copy time, so the label
-            // changes exactly when another full minute has passed.
-            TimelineView(.periodic(from: item.copiedAt, by: 60)) { context in
-                Text(relativeTime(now: context.date))
-            }
-            .help(Self.utcFormatter.string(from: item.copiedAt))
+            .padding()
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        formatter.dateTimeStyle = .numeric
-        return formatter
-    }()
-
-    /// Minute granularity: "Just now" for the first minute, then "1 minute ago",
-    /// "2 hours ago", etc.
-    private func relativeTime(now: Date) -> String {
-        let elapsed = now.timeIntervalSince(item.copiedAt)
-        guard elapsed >= 60 else { return "Just now" }
-        // Round down to whole minutes so seconds never show up.
-        let flooredMinutes = (elapsed / 60).rounded(.down) * 60
-        return Self.relativeFormatter.localizedString(
-            for: item.copiedAt,
-            relativeTo: item.copiedAt.addingTimeInterval(flooredMinutes)
-        )
-    }
-
-    private var appIcon: NSImage? {
-        guard let bundleID = item.sourceBundleID,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        else { return nil }
-        return NSWorkspace.shared.icon(forFile: url.path)
     }
 }
 
