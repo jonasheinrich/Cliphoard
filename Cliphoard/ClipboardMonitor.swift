@@ -11,10 +11,8 @@ final class ClipboardMonitor {
     /// How often the clipboard's change counter is checked.
     static let pollInterval: Duration = .milliseconds(100)
 
-    /// The most recent text on the clipboard, or `nil` if it holds no text.
-    private(set) var latestText: String?
-    /// When `latestText` was last updated.
-    private(set) var lastChanged: Date?
+    /// The most recent text item on the clipboard, or `nil` if none seen yet.
+    private(set) var latestItem: ClipboardItem?
 
     private let pasteboard: NSPasteboard
     private var lastChangeCount: Int
@@ -48,7 +46,14 @@ final class ClipboardMonitor {
 
         // Text only for now; images, files etc. are ignored.
         guard let text = pasteboard.string(forType: .string) else { return }
-        latestText = text
-        lastChanged = .now
+        // macOS doesn't record which app wrote to the clipboard, so we use the
+        // frontmost app at the moment we notice the change as a best guess.
+        let app = NSWorkspace.shared.frontmostApplication
+        latestItem = ClipboardItem(
+            text: text,
+            copiedAt: .now,
+            sourceAppName: app?.localizedName,
+            sourceBundleID: app?.bundleIdentifier
+        )
     }
 }
