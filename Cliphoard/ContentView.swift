@@ -22,6 +22,17 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Clipboard History")
+            .toolbar {
+                // Mirrors the detail page's back button in the same spot, so
+                // the toolbar keeps its height and layout when navigating.
+                ToolbarItem(placement: .navigation) {
+                    // Square frame so the glass background becomes a circle
+                    // the size of the back button instead of a narrow pill.
+                    Image(systemName: "doc.on.clipboard")
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                }
+            }
             .navigationDestination(for: ClipboardItem.self) { item in
                 ClipboardItemDetailView(item: item)
             }

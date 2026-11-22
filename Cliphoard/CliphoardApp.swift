@@ -9,6 +9,7 @@ struct CliphoardApp: App {
             ContentView(monitor: monitor)
                 .onAppear { monitor.start() }
         }
+        .windowToolbarStyle(.unified)
     }
 
     /// Opens the per-user history database. On failure the app still runs,
