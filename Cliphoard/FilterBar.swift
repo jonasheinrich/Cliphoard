@@ -60,14 +60,14 @@ struct FilterBar: View {
             .fixedSize()
             .help("Only items copied in this timeframe")
 
-            if isActive {
-                Button("Clear") {
-                    searchText = ""
-                    app = .all
-                    timeframe = .anyTime
-                }
-                .help("Show all items")
+            // Always shown so the bar doesn't shift; disabled without filters.
+            Button("Clear") {
+                searchText = ""
+                app = .all
+                timeframe = .anyTime
             }
+            .disabled(!isActive)
+            .help("Show all items")
         }
     }
 }
