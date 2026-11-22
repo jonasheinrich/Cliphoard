@@ -1,0 +1,11 @@
+.DS_Store
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+.build/
+*.xcuserstate
+
+# Local clipboard database
+*.sqlite
+*.sqlite-*
