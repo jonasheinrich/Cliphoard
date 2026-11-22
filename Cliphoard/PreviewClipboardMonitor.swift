@@ -3,13 +3,25 @@ import Foundation
 import Observation
 
 /// A monitor with fixed data for SwiftUI previews. It never touches the
-/// real clipboard.
+/// real clipboard or database, but pages through its samples like the real
+/// monitor does, so infinite scrolling can be tried in the canvas.
 @Observable
 final class PreviewClipboardMonitor: ClipboardMonitoring {
-    var latestItem: ClipboardItem?
+    private(set) var items: [ClipboardItem] = []
+    var hasMore: Bool { items.count < allItems.count }
 
-    init(latestItem: ClipboardItem? = .sampleShort) {
-        self.latestItem = latestItem
+    private let allItems: [ClipboardItem]
+    private let pageSize: Int
+
+    init(items: [ClipboardItem] = ClipboardItem.samples(count: 250), pageSize: Int = 100) {
+        self.allItems = items
+        self.pageSize = pageSize
+        loadMore()
+    }
+
+    func loadMore() {
+        let next = allItems.dropFirst(items.count).prefix(pageSize)
+        items.append(contentsOf: next)
     }
 
     func start() {}
@@ -17,39 +29,48 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
 }
 
 extension ClipboardItem {
-    static let sampleShort = ClipboardItem(
-        text: "https://developer.apple.com/documentation/swiftui",
-        copiedAt: .now.addingTimeInterval(-20),
-        sourceAppName: "Safari",
-        sourceBundleID: "com.apple.Safari"
-    )
+    /// `count` items, newest first: a few hand-written ones covering the
+    /// interesting cases, then generated filler spaced 7 minutes apart.
+    static func samples(count: Int) -> [ClipboardItem] {
+        let now = Date.now
+        let handWritten: [(String, TimeInterval, String?, String?)] = [
+            ("https://developer.apple.com/documentation/swiftui", 20, "Safari", "com.apple.Safari"),
+            ("""
+            func greet(_ name: String) -> String {
+                "Hello, \\(name)!"
+            }
+            """, 5 * 60, "Xcode", "com.apple.dt.Xcode"),
+            (Array(
+                repeating: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+                count: 20
+            ).joined(separator: " "), 3 * 3600, "Terminal", "com.apple.Terminal"),
+            ("copied via pbcopy", 2 * 86400, nil, nil),
+        ]
+        let apps = [
+            ("Safari", "com.apple.Safari"),
+            ("Notes", "com.apple.Notes"),
+            ("Terminal", "com.apple.Terminal"),
+            ("Xcode", "com.apple.dt.Xcode"),
+        ]
 
-    static let sampleCode = ClipboardItem(
-        text: """
-        func greet(_ name: String) -> String {
-            "Hello, \\(name)!"
+        return (0..<count).map { index in
+            let id = Int64(count - index)
+            if index < handWritten.count {
+                let (text, age, appName, bundleID) = handWritten[index]
+                return ClipboardItem(
+                    id: id, text: text, copiedAt: now.addingTimeInterval(-age),
+                    sourceAppName: appName, sourceBundleID: bundleID
+                )
+            }
+            let app = apps[index % apps.count]
+            return ClipboardItem(
+                id: id,
+                text: "Sample item #\(index + 1)",
+                copiedAt: now.addingTimeInterval(-3 * 86400 - Double(index) * 7 * 60),
+                sourceAppName: app.0,
+                sourceBundleID: app.1
+            )
         }
-        """,
-        copiedAt: .now.addingTimeInterval(-5 * 60),
-        sourceAppName: "Xcode",
-        sourceBundleID: "com.apple.dt.Xcode"
-    )
-
-    static let sampleLong = ClipboardItem(
-        text: Array(
-            repeating: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-            count: 20
-        ).joined(separator: " "),
-        copiedAt: .now.addingTimeInterval(-3 * 3600),
-        sourceAppName: "Terminal",
-        sourceBundleID: "com.apple.Terminal"
-    )
-
-    static let sampleUnknownApp = ClipboardItem(
-        text: "copied via pbcopy",
-        copiedAt: .now.addingTimeInterval(-2 * 86400),
-        sourceAppName: nil,
-        sourceBundleID: nil
-    )
+    }
 }
 #endif

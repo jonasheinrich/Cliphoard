@@ -93,20 +93,39 @@ nonisolated final class ClipboardStore {
         return saved
     }
 
-    /// The most recently copied item, if any.
-    func latest() throws -> ClipboardItem? {
-        let statement = try prepare("""
-            SELECT id, text, copied_at, source_app_name, source_bundle_id
-            FROM items
-            ORDER BY copied_at DESC, id DESC
-            LIMIT 1
-            """)
+    /// Items newest first, starting after `cursor` (exclusive), at most `limit`.
+    ///
+    /// Uses keyset pagination: the next page continues from the last item
+    /// already loaded rather than from a row offset, so items copied in the
+    /// meantime don't shift pages or cause duplicates. Pass `nil` for the
+    /// first page. The `copied_at` index covers this query (SQLite indexes
+    /// include the rowid `id` as a tiebreaker).
+    func items(before cursor: ClipboardItem? = nil, limit: Int) throws -> [ClipboardItem] {
+        let columns = "SELECT id, text, copied_at, source_app_name, source_bundle_id FROM items"
+        let order = "ORDER BY copied_at DESC, id DESC LIMIT ?3"
+        let statement: OpaquePointer
+        if let cursor, let cursorID = cursor.id {
+            statement = try prepare("""
+                \(columns)
+                WHERE copied_at < ?1 OR (copied_at = ?1 AND id < ?2)
+                \(order)
+                """)
+            sqlite3_bind_double(statement, 1, cursor.copiedAt.timeIntervalSince1970)
+            sqlite3_bind_int64(statement, 2, cursorID)
+        } else {
+            statement = try prepare("\(columns) \(order)")
+        }
         defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 3, Int64(limit))
 
-        switch sqlite3_step(statement) {
-        case SQLITE_ROW: return item(from: statement)
-        case SQLITE_DONE: return nil
-        default: throw lastError("select latest")
+        var result: [ClipboardItem] = []
+        result.reserveCapacity(limit)
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW: result.append(item(from: statement))
+            case SQLITE_DONE: return result
+            default: throw lastError("select items")
+            }
         }
     }
 

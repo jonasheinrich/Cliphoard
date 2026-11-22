@@ -4,24 +4,42 @@ import AppKit
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
 
+    /// Fetch the next page when a row this close to the end appears, so new
+    /// items are usually ready before the user reaches the bottom.
+    private static let prefetchDistance = 20
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Latest clipboard item")
+            Text("Clipboard history")
                 .font(.headline)
 
-            if let item = monitor.latestItem {
-                // A list of rows later; for now just the latest item.
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ClipboardItemRow(item: item)
-                    }
-                }
-            } else {
+            if monitor.items.isEmpty {
                 ContentUnavailableView(
                     "No text on the clipboard",
                     systemImage: "doc.on.clipboard",
                     description: Text("Copy some text and it will appear here.")
                 )
+            } else {
+                ScrollView {
+                    // Lazy: only rows on (or near) the screen are created.
+                    LazyVStack(spacing: 6) {
+                        ForEach(Array(monitor.items.enumerated()), id: \.element.id) { index, item in
+                            ClipboardItemRow(item: item)
+                                .onAppear {
+                                    if index >= monitor.items.count - Self.prefetchDistance {
+                                        monitor.loadMore()
+                                    }
+                                }
+                        }
+
+                        if monitor.hasMore {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding()
+                                .onAppear { monitor.loadMore() }
+                        }
+                    }
+                }
             }
         }
         .padding()
@@ -114,23 +132,15 @@ private struct ItemMetadataView: View {
 }
 
 #if DEBUG
-#Preview("Short text") {
-    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleShort))
+#Preview("History (250 items)") {
+    ContentView(monitor: PreviewClipboardMonitor())
 }
 
-#Preview("Code") {
-    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleCode))
-}
-
-#Preview("Long text") {
-    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleLong))
-}
-
-#Preview("Unknown app") {
-    ContentView(monitor: PreviewClipboardMonitor(latestItem: .sampleUnknownApp))
+#Preview("Single item") {
+    ContentView(monitor: PreviewClipboardMonitor(items: ClipboardItem.samples(count: 1)))
 }
 
 #Preview("Empty") {
-    ContentView(monitor: PreviewClipboardMonitor(latestItem: nil))
+    ContentView(monitor: PreviewClipboardMonitor(items: []))
 }
 #endif
