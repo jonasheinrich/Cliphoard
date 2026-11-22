@@ -95,6 +95,9 @@ struct ContentView: View {
         }
         .onChange(of: appFilter) { applyFilter() }
         .onChange(of: timeframe) { applyFilter() }
+        .onChange(of: isSearchFocused) {
+            if isSearchFocused { selectedID = nil }
+        }
         .onAppear(perform: installTabMonitor)
         .onDisappear(perform: removeTabMonitor)
     }
