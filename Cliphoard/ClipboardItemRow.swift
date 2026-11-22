@@ -4,6 +4,8 @@ import SwiftUI
 /// the left, source app and time on the right, inside a rounded grey box.
 struct ClipboardItemRow: View {
     let item: ClipboardItem
+    /// Highlighted as the keyboard selection.
+    var isSelected = false
 
     /// Longer text is cut off with "…"; the detail page shows all of it.
     static let maxLines = 4
@@ -33,7 +35,16 @@ struct ClipboardItemRow: View {
             .frame(width: 160, alignment: .leading)
         }
         .padding(8)
-        .background(.quaternary.opacity(isHovered ? 1 : 0.5), in: .rect(cornerRadius: 6))
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 6)
+            ZStack {
+                shape.fill(.quaternary.opacity(isHovered ? 1 : 0.5))
+                if isSelected {
+                    shape.fill(Color.accentColor.opacity(0.15))
+                    shape.strokeBorder(Color.accentColor, lineWidth: 2)
+                }
+            }
+        }
         // Make the whole box clickable, not just the text.
         .contentShape(.rect(cornerRadius: 6))
         .onHover { isHovered = $0 }
