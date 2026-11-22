@@ -1,11 +1,10 @@
 import Foundation
 import SQLite3
 
-/// Persists clipboard items in a per-user SQLite database.
+/// Reads and writes clipboard items in the history database.
 ///
-/// The database lives in the user's Application Support directory, so every
-/// macOS user gets their own history, protected by normal file permissions.
-/// (If the app is ever sandboxed, the same API resolves to the container.)
+/// Gets an already opened and migrated connection from `DatabaseCreator`;
+/// creating the database happens at app startup (see `CliphoardApp`).
 ///
 /// Not thread-safe by design: the owner (the main-actor `ClipboardMonitor`)
 /// serializes all access.
@@ -20,50 +19,11 @@ nonisolated final class ClipboardStore {
         }
     }
 
-    /// Location of the database file.
-    let url: URL
     private let db: OpaquePointer
 
-    /// `~/Library/Application Support/<bundle id>/history.sqlite`, creating the
-    /// directory (owner-only) if needed.
-    static func defaultURL() throws -> URL {
-        let fileManager = FileManager.default
-        let base = try fileManager.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let directory = base.appendingPathComponent(
-            Bundle.main.bundleIdentifier ?? "dev.local.Cliphoard",
-            isDirectory: true
-        )
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        // Clipboard history is sensitive: only the owner may read it.
-        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-        return directory.appendingPathComponent("history.sqlite")
-    }
-
-    init(url: URL) throws {
-        self.url = url
-
-        // Create the file ourselves so it starts out owner-only. SQLite gives
-        // its -wal/-shm side files the same permissions as the main file.
-        let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: url.path) {
-            fileManager.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        }
-
-        var handle: OpaquePointer?
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
-        guard sqlite3_open_v2(url.path, &handle, flags, nil) == SQLITE_OK, let handle else {
-            let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "out of memory"
-            sqlite3_close(handle)
-            throw StoreError.sqlite("cannot open \(url.path): \(message)")
-        }
-        db = handle
-
-        try migrate()
+    /// Takes ownership of `db` and closes it when the store is released.
+    init(db: OpaquePointer) {
+        self.db = db
     }
 
     deinit {
@@ -191,57 +151,7 @@ nonisolated final class ClipboardStore {
             .replacingOccurrences(of: "_", with: #"\_"#)
     }
 
-    // MARK: - Schema
-
-    /// Schema versions are tracked in SQLite's `user_version`. To change the
-    /// schema, add another `if version < N` step; never edit an old one.
-    private func migrate() throws {
-        try execute("PRAGMA journal_mode = WAL")
-
-        let version = try userVersion()
-        if version < 1 {
-            try execute("""
-                BEGIN;
-                CREATE TABLE items (
-                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                    text             TEXT NOT NULL,
-                    copied_at        REAL NOT NULL, -- seconds since 1970-01-01 UTC
-                    source_app_name  TEXT,
-                    source_bundle_id TEXT
-                );
-                CREATE INDEX items_copied_at ON items (copied_at);
-                PRAGMA user_version = 1;
-                COMMIT;
-                """)
-        }
-        if version < 2 {
-            // Lets the app filter read one app's items already in date order.
-            try execute("""
-                BEGIN;
-                CREATE INDEX items_source_copied_at ON items (source_bundle_id, copied_at);
-                PRAGMA user_version = 2;
-                COMMIT;
-                """)
-        }
-    }
-
-    private func userVersion() throws -> Int32 {
-        let statement = try prepare("PRAGMA user_version")
-        defer { sqlite3_finalize(statement) }
-        guard sqlite3_step(statement) == SQLITE_ROW else { throw lastError("read user_version") }
-        return sqlite3_column_int(statement, 0)
-    }
-
     // MARK: - SQLite helpers
-
-    private func execute(_ sql: String) throws {
-        var message: UnsafeMutablePointer<CChar>?
-        guard sqlite3_exec(db, sql, nil, nil, &message) == SQLITE_OK else {
-            let text = message.map { String(cString: $0) } ?? "unknown error"
-            sqlite3_free(message)
-            throw StoreError.sqlite(text)
-        }
-    }
 
     private func prepare(_ sql: String) throws -> OpaquePointer {
         var statement: OpaquePointer?

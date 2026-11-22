@@ -12,13 +12,15 @@ struct CliphoardApp: App {
         .windowToolbarStyle(.unified)
     }
 
-    /// Opens the per-user history database. On failure the app still runs,
+    /// Creates or opens the per-user history database (including schema
+    /// migrations) and hands it to the store. On failure the app still runs,
     /// keeping items in memory only.
     private static func openStore() -> ClipboardStore? {
         do {
-            let store = try ClipboardStore(url: ClipboardStore.defaultURL())
-            print("Clipboard history: \(store.url.path)")
-            return store
+            let url = try DatabaseCreator.defaultURL()
+            let db = try DatabaseCreator.open(at: url)
+            print("Clipboard history: \(url.path)")
+            return ClipboardStore(db: db)
         } catch {
             print("Could not open clipboard history database: \(error)")
             return nil
