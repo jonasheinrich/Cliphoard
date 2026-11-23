@@ -15,6 +15,7 @@ struct CliphoardApp: App {
     var body: some Scene {
         Window("Cliphoard", id: Self.mainWindowID) {
             ContentView(monitor: monitor)
+                .showsAppInDock()
         }
         .windowToolbarStyle(.unified)
 
@@ -27,6 +28,7 @@ struct CliphoardApp: App {
 
         Settings {
             SettingsView(monitor: monitor, hotKeys: hotKeys)
+                .showsAppInDock()
         }
     }
 
