@@ -119,6 +119,21 @@ struct ContentView: View {
         ))
     }
 
+    private static let typeToSearchCharacters = CharacterSet.alphanumerics.union(["/"])
+    private static let listShortcutKeys: Set<String> = ["j", "k", "l", "c"]
+
+    private func startSearch(typing text: String) {
+        isSearchFocused = true
+        guard !text.isEmpty else { return }
+        // Focusing the field selects its text, so the typed character would
+        // replace the search. Append it at the end instead once focus lands.
+        DispatchQueue.main.async {
+            guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+            editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+            editor.insertText(text, replacementRange: editor.selectedRange())
+        }
+    }
+
     private func focusFirstResult() {
         applyFilter()
         selectedID = monitor.items.first?.id
@@ -189,6 +204,13 @@ struct ContentView: View {
             .onKeyPress(.escape) {
                 guard selectedID != nil else { return .ignored }
                 selectedID = nil
+                return .handled
+            }
+            .onKeyPress(characters: Self.typeToSearchCharacters) { press in
+                guard press.hasNoCommandModifiers,
+                      !Self.listShortcutKeys.contains(press.characters.lowercased())
+                else { return .ignored }
+                startSearch(typing: press.characters == "/" ? "" : press.characters)
                 return .handled
             }
         }
