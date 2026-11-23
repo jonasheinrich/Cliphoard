@@ -7,6 +7,7 @@ struct ContentView: View {
     private static let prefetchDistance = 20
 
     @State private var path: [ClipboardItem] = []
+    @State private var isShowingHelp = false
     @State private var selectedID: Int64?
     @State private var visibleIDs: Set<Int64> = []
     @FocusState private var isListFocused: Bool
@@ -54,9 +55,14 @@ struct ContentView: View {
                 // Same spot and size as the detail page's back button, so the
                 // toolbar height doesn't jump between pages.
                 ToolbarItem(placement: .navigation) {
-                    Image(systemName: "doc.on.clipboard")
-                        .frame(width: 32, height: 32)
-                        .accessibilityHidden(true)
+                    Button { isShowingHelp.toggle() } label: {
+                        Image(systemName: "questionmark.circle")
+                            .frame(width: 32, height: 32)
+                    }
+                    .help("Keyboard shortcuts")
+                    .popover(isPresented: $isShowingHelp, arrowEdge: .bottom) {
+                        KeyboardHelpView()
+                    }
                 }
             }
             .navigationDestination(for: ClipboardItem.self) { item in
