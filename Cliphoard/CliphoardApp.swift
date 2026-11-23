@@ -2,14 +2,25 @@ import SwiftUI
 
 @main
 struct CliphoardApp: App {
-    @State private var monitor = ClipboardMonitor(store: Self.openStore())
+    static let mainWindowID = "main"
+
+    private let monitor = ClipboardMonitor(store: Self.openStore())
+
+    init() {
+        monitor.start()
+        LaunchAtLogin.enableOnFirstLaunch()
+    }
 
     var body: some Scene {
-        WindowGroup("Cliphoard") {
+        Window("Cliphoard", id: Self.mainWindowID) {
             ContentView(monitor: monitor)
-                .onAppear { monitor.start() }
         }
         .windowToolbarStyle(.unified)
+
+        // Without a Dock icon, this is the only way back to a closed window.
+        MenuBarExtra("Cliphoard", systemImage: "doc.on.clipboard") {
+            StatusMenu()
+        }
     }
 
     private static func openStore() -> ClipboardStore? {
@@ -22,5 +33,29 @@ struct CliphoardApp: App {
             print("Could not open clipboard history database: \(error)")
             return nil
         }
+    }
+}
+
+private struct StatusMenu: View {
+    @Environment(\.openWindow) private var openWindow
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled
+
+    var body: some View {
+        Button("Show Clipboard History") {
+            openWindow(id: CliphoardApp.mainWindowID)
+            NSApp.activate()
+        }
+        .keyboardShortcut("o")
+
+        Toggle("Launch at Login", isOn: $launchAtLogin)
+            .onChange(of: launchAtLogin) {
+                LaunchAtLogin.setEnabled(launchAtLogin)
+                launchAtLogin = LaunchAtLogin.isEnabled
+            }
+
+        Divider()
+
+        Button("Quit Cliphoard") { NSApp.terminate(nil) }
+            .keyboardShortcut("q")
     }
 }
