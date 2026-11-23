@@ -23,7 +23,7 @@ Open with ⌘, or from the menu bar icon.
 |        | c                       | Copy item                       |
 |        | esc                     | Clear selection                 |
 |        | / or a letter or number | Search                          |
-| Search | ⇥ or ↩                  | Go to the first result          |
+| Search | ⇥                       | Go to the first result          |
 |        | ⇧⇥ (from the list)      | Back to search                  |
 | Detail | ← or h                  | Back to the list                |
 |        | c                       | Copy item                       |
