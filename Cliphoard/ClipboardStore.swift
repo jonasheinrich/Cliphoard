@@ -128,6 +128,41 @@ nonisolated final class ClipboardStore {
         }
     }
 
+    func count() throws -> Int {
+        let statement = try prepare("SELECT COUNT(*) FROM items")
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw lastError("count items") }
+        return Int(sqlite3_column_int64(statement, 0))
+    }
+
+    /// Deletes everything but the newest `limit` items; returns how many were
+    /// deleted.
+    @discardableResult
+    func prune(keeping limit: Int) throws -> Int {
+        let statement = try prepare("""
+            DELETE FROM items WHERE id IN (
+                SELECT id FROM items ORDER BY copied_at DESC, id DESC LIMIT -1 OFFSET ?
+            )
+            """)
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, Int64(max(limit, 0)))
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw lastError("prune items") }
+        return Int(sqlite3_changes(db))
+    }
+
+    func oldestItem() throws -> ClipboardItem? {
+        let statement = try prepare("""
+            SELECT id, text, copied_at, source_app_name, source_bundle_id
+            FROM items ORDER BY copied_at, id LIMIT 1
+            """)
+        defer { sqlite3_finalize(statement) }
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW: return item(from: statement)
+        case SQLITE_DONE: return nil
+        default: throw lastError("select oldest item")
+        }
+    }
+
     private static func escapeLike(_ text: String) -> String {
         text.replacingOccurrences(of: #"\"#, with: #"\\"#)
             .replacingOccurrences(of: "%", with: #"\%"#)

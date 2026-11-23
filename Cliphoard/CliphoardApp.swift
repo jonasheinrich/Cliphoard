@@ -5,6 +5,7 @@ struct CliphoardApp: App {
     static let mainWindowID = "main"
 
     private let monitor = ClipboardMonitor(store: Self.openStore())
+    private let hotKeys = GlobalHotKeyController()
 
     init() {
         monitor.start()
@@ -18,8 +19,14 @@ struct CliphoardApp: App {
         .windowToolbarStyle(.unified)
 
         // Without a Dock icon, this is the only way back to a closed window.
-        MenuBarExtra("Cliphoard", systemImage: "doc.on.clipboard") {
+        MenuBarExtra {
             StatusMenu()
+        } label: {
+            MenuBarLabel(hotKeys: hotKeys)
+        }
+
+        Settings {
+            SettingsView(monitor: monitor, hotKeys: hotKeys)
         }
     }
 
@@ -36,8 +43,26 @@ struct CliphoardApp: App {
     }
 }
 
+/// The label lives as long as the app, unlike the windows, so it hands the
+/// hot key its `openWindow` action.
+private struct MenuBarLabel: View {
+    let hotKeys: GlobalHotKeyController
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: "doc.on.clipboard")
+            .onAppear {
+                hotKeys.action = { [openWindow] in
+                    openWindow(id: CliphoardApp.mainWindowID)
+                    NSApp.activate()
+                }
+            }
+    }
+}
+
 private struct StatusMenu: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
@@ -46,6 +71,12 @@ private struct StatusMenu: View {
             NSApp.activate()
         }
         .keyboardShortcut("o")
+
+        Button("Settings…") {
+            NSApp.activate()
+            openSettings()
+        }
+        .keyboardShortcut(",")
 
         Toggle("Launch at Login", isOn: $launchAtLogin)
             .onChange(of: launchAtLogin) {

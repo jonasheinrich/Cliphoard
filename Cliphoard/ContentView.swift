@@ -18,6 +18,7 @@ struct ContentView: View {
     private static let searchDelay: Duration = .milliseconds(200)
     @FocusState private var isSearchFocused: Bool
     @State private var tabMonitor: Any?
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -63,6 +64,15 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 300)
+        .background {
+            // Without a Dock icon the app menu never shows, so its ⌘, item
+            // can't be relied on.
+            Button("Settings") { openSettings() }
+                .keyboardShortcut(",", modifiers: .command)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .onChange(of: path) {
             if path.isEmpty { isListFocused = true }
         }

@@ -11,6 +11,9 @@ final class ClipboardMonitor: ClipboardMonitoring {
     private(set) var hasMore = false
     private(set) var filter = ClipboardFilter()
     private(set) var apps: [SourceApp] = []
+    var maxItems: Int {
+        didSet { enforceLimit() }
+    }
 
     private let pasteboard: NSPasteboard
     private let store: ClipboardStore?
@@ -22,9 +25,14 @@ final class ClipboardMonitor: ClipboardMonitoring {
     /// Negative, so they never clash with database ids.
     private var nextUnsavedID: Int64 = -1
 
-    init(pasteboard: NSPasteboard = .general, store: ClipboardStore? = nil) {
+    init(
+        pasteboard: NSPasteboard = .general,
+        store: ClipboardStore? = nil,
+        maxItems: Int = HistoryLimit.current
+    ) {
         self.pasteboard = pasteboard
         self.store = store
+        self.maxItems = maxItems
         // Start at -1 so the first check always reads the current contents.
         self.lastChangeCount = -1
 
@@ -34,6 +42,7 @@ final class ClipboardMonitor: ClipboardMonitoring {
         } catch {
             print("Could not read clipboard history: \(error)")
         }
+        enforceLimit()
         loadNextPage()
     }
 
@@ -74,6 +83,11 @@ final class ClipboardMonitor: ClipboardMonitoring {
             sourceAppName: item.sourceAppName,
             sourceBundleID: item.sourceBundleID
         ))
+    }
+
+    func historyCount() -> Int {
+        guard let store else { return unsavedItems.count }
+        return (try? store.count()) ?? 0
     }
 
     func loadMore() {
@@ -138,6 +152,28 @@ final class ClipboardMonitor: ClipboardMonitoring {
         countForSourceApp(item)
         if filter.matches(item) {
             items.insert(item, at: 0)
+        }
+        enforceLimit()
+    }
+
+    private func enforceLimit() {
+        guard let store else {
+            unsavedItems = Array(unsavedItems.prefix(maxItems))
+            let kept = Set(unsavedItems.compactMap(\.id))
+            items.removeAll { !kept.contains($0.id ?? 0) }
+            return
+        }
+        do {
+            guard try store.prune(keeping: maxItems) > 0 else { return }
+            apps = try store.sourceApps()
+            guard let oldest = try store.oldestItem() else {
+                items = []
+                hasMore = false
+                return
+            }
+            items.removeAll { ($0.copiedAt, $0.id ?? 0) < (oldest.copiedAt, oldest.id ?? 0) }
+        } catch {
+            print("Could not limit clipboard history: \(error)")
         }
     }
 
