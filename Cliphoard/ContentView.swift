@@ -33,7 +33,9 @@ struct ContentView: View {
                     searchFocus: $isSearchFocused,
                     onSubmitSearch: focusFirstResult
                 )
-                .padding([.horizontal, .top])
+                .padding()
+
+                Divider()
 
                 if !monitor.items.isEmpty {
                     history
