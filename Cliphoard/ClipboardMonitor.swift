@@ -27,6 +27,9 @@ final class ClipboardMonitor: ClipboardMonitoring {
     private var pollTask: Task<Void, Never>?
     /// Newest text regardless of the filter, for skipping repeats.
     private var latestText: String?
+    /// The newest item while it's a secret we haven't decrypted. Only a new
+    /// secret needs comparing with it, and storing that needs the key anyway.
+    private var undecryptedLatest: ClipboardItem?
     private var unsavedItems: [ClipboardItem] = []
     /// Negative, so they never clash with database ids.
     private var nextUnsavedID: Int64 = -1
@@ -47,7 +50,13 @@ final class ClipboardMonitor: ClipboardMonitoring {
         self.lastChangeCount = -1
 
         do {
-            latestText = try store?.items(limit: 1).first.flatMap(reveal)
+            if let newest = try store?.items(limit: 1).first {
+                if newest.isSecret {
+                    undecryptedLatest = newest
+                } else {
+                    latestText = newest.text
+                }
+            }
             apps = try store?.sourceApps() ?? []
         } catch {
             print("Could not read clipboard history: \(error)")
@@ -94,7 +103,7 @@ final class ClipboardMonitor: ClipboardMonitoring {
         // Cliphoard (the frontmost app) as the source.
         lastChangeCount = pasteboard.changeCount
 
-        guard text != latestText else { return }
+        guard !isRepeat(text, isSecret: item.isSecret) else { return }
         record(text, sourceAppName: item.sourceAppName, sourceBundleID: item.sourceBundleID, isSecret: item.isSecret)
     }
 
@@ -165,10 +174,6 @@ final class ClipboardMonitor: ClipboardMonitoring {
 
         guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
 
-        // Also avoids a new row on every launch while the clipboard is
-        // unchanged.
-        guard text != latestText else { return }
-
         // macOS doesn't record the clipboard's source app, so we guess the
         // frontmost one. On the first check the text predates our launch, so
         // there's no guess.
@@ -180,12 +185,23 @@ final class ClipboardMonitor: ClipboardMonitoring {
             byContent: detectSecretsByContent
         )
         guard verdict != .skip else { return }
+        // Also avoids a new row on every launch while the clipboard is
+        // unchanged.
+        guard !isRepeat(text, isSecret: verdict == .secret) else { return }
         record(
             text,
             sourceAppName: app?.localizedName,
             sourceBundleID: app?.bundleIdentifier,
             isSecret: verdict == .secret
         )
+    }
+
+    private func isRepeat(_ text: String, isSecret: Bool) -> Bool {
+        if isSecret, let pending = undecryptedLatest {
+            latestText = reveal(pending)
+            undecryptedLatest = nil
+        }
+        return text == latestText
     }
 
     private func record(_ text: String, sourceAppName: String?, sourceBundleID: String?, isSecret: Bool) {
@@ -202,6 +218,7 @@ final class ClipboardMonitor: ClipboardMonitoring {
                 // Better to lose it than to store a secret in plain text.
                 print("Could not encrypt secret: \(error)")
                 latestText = text
+                undecryptedLatest = nil
                 return
             }
         }
@@ -217,6 +234,7 @@ final class ClipboardMonitor: ClipboardMonitoring {
         }
 
         latestText = text
+        undecryptedLatest = nil
         countForSourceApp(item)
         if filter.matches(item) {
             items.insert(item, at: 0)
