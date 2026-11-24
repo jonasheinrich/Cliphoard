@@ -117,9 +117,11 @@ top of `scripts/release.sh`) to sign and notarize; the cask then drops the
 ## Later
 - Store on what device something was copied and send it to some cloud to share it.
 - Refactor. I think Claude left a bit of a mess in some places. Probably visual and business logic could be separated for instance.
-- With a developer account.
+- With a developer account:
     - Team sign it with a better app id.
     - Use Secure Enclave for the secret key that encodes the passwords.
+- From-to filtering for time.
+- Regex filter for text.
 
 ## Note
 
