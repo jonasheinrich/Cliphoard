@@ -6,6 +6,8 @@ Only text is recorded; images, files and other clipboard types are ignored.
 The history is stored locally in SQLite at
 `~/Library/Application Support/dev.local.Cliphoard/history.sqlite`, readable only by your user.
 
+![Screenshot](imgs/Screenshot.jpg)
+
 ## Secrets
 
 Passwords and tokens are hidden in the list, left out of searches and stored
