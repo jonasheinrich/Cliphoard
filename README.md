@@ -106,3 +106,21 @@ instead of polling.
 With an Apple developer account, set `DEVELOPER_ID` and `NOTARY_PROFILE` (see the
 top of `scripts/release.sh`) to sign and notarize; the cask then drops the
 "Open Anyway" note.
+
+## Product Questions
+- Typing a letter goes to search but j etc does not. Is that bad UX/confusing?
+- When copying an item from clipboard:
+    - Add a new entry? Currently nothing is added.
+    - If yes: Show as copied from clipboard?
+- Also store rich Text Format and pictures?
+
+## Later
+- Store on what device something was copied and send it to some cloud to share it.
+- Refactor. I think Claude left a bit of a mess in some places. Probably visual and business logic could be separated for instance.
+- With a developer account.
+    - Team sign it with a better app id.
+    - Use Secure Enclave for the secret key that encodes the passwords.
+
+## Note
+
+Developed using Claude Code without specs or tests. Looked a bit into the code but didn't bother too much. Just a small fun project. :)
