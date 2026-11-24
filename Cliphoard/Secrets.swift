@@ -107,7 +107,7 @@ nonisolated final class SecretCipher {
     }
 
     func encrypt(_ text: String) throws -> Data {
-        guard let data = try AES.GCM.seal(Data(text.utf8), using: key()).combined else {
+        guard let data = try AES.GCM.seal(Data(text.utf8), using: key(createIfMissing: true)).combined else {
             throw CipherError.invalidData
         }
         return data
@@ -115,14 +115,17 @@ nonisolated final class SecretCipher {
 
     func decrypt(_ data: Data) throws -> String {
         let box = try AES.GCM.SealedBox(combined: data)
-        let plain = try AES.GCM.open(box, using: key())
+        let plain = try AES.GCM.open(box, using: key(createIfMissing: false))
         guard let text = String(data: plain, encoding: .utf8) else { throw CipherError.invalidData }
         return text
     }
 
-    private func key() throws -> SymmetricKey {
+    /// Decrypting never creates a key: a new one couldn't open anything.
+    private func key(createIfMissing: Bool) throws -> SymmetricKey {
         if let cachedKey { return cachedKey }
-        let key = try loadKey() ?? createKey()
+        guard let key = try loadKey() ?? (createIfMissing ? createKey() : nil) else {
+            throw CipherError.keychain(errSecItemNotFound)
+        }
         cachedKey = key
         return key
     }
