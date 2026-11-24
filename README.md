@@ -45,6 +45,21 @@ Open with ⌘, or from the menu bar icon.
 | App    | ⌘,                      | Settings                        |
 
 
+## Install
+
+With Homebrew:
+
+```sh
+brew install --cask jonasheinrich/tap/cliphoard
+```
+
+Or download the DMG from the [latest release](https://github.com/jonasheinrich/Cliphoard/releases/latest)
+and drag Cliphoard to Applications.
+
+Cliphoard isn't notarized by Apple yet, so macOS blocks its first launch. Open
+System Settings > Privacy & Security and click "Open Anyway". This is needed
+once per installed version.
+
 ## Build from source
 
 Requires macOS 15 and Xcode (the full app, not only the Command Line Tools).
@@ -77,3 +92,17 @@ history and settings as well.
 `make dev` keeps running until Ctrl-C and launches the app in the background.
 With `fswatch` installed (`brew install fswatch`) it reacts to changes instantly
 instead of polling.
+
+## Releasing
+
+1. Set the version (`MARKETING_VERSION`) in the Xcode project and commit.
+2. `scripts/release.sh` builds `build/Cliphoard-<version>.dmg` and the Homebrew
+   cask `build/cliphoard.rb`. Try the DMG.
+3. `scripts/release.sh --publish` additionally tags `v<version>`, pushes the tag
+   and creates the GitHub release with the DMG. The GitHub cli `gh` is needed for that. Install with `brew install gh` and run `gh auth login`.
+4. Copy `build/cliphoard.rb` to `Casks/cliphoard.rb` in
+   [jonasheinrich/homebrew-tap](https://github.com/jonasheinrich/homebrew-tap) and push.
+
+With an Apple developer account, set `DEVELOPER_ID` and `NOTARY_PROFILE` (see the
+top of `scripts/release.sh`) to sign and notarize; the cask then drops the
+"Open Anyway" note.
