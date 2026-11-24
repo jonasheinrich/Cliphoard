@@ -4,11 +4,19 @@ import SwiftUI
 struct CliphoardApp: App {
     static let mainWindowID = "main"
 
-    private let monitor = ClipboardMonitor(store: Self.openStore())
-    private let hotKeys = GlobalHotKeyController()
-    private let vault = SecretVault()
+    private let monitor: ClipboardMonitor
+    private let hotKeys: GlobalHotKeyController
+    private let vault: SecretVault
 
     init() {
+        // Used by `make uninstall`, which can't remove the login item itself.
+        if CommandLine.arguments.contains("--unregister-login-item") {
+            LaunchAtLogin.setEnabled(false)
+            exit(0)
+        }
+        monitor = ClipboardMonitor(store: Self.openStore())
+        hotKeys = GlobalHotKeyController()
+        vault = SecretVault()
         monitor.start()
         LaunchAtLogin.enableOnFirstLaunch()
     }

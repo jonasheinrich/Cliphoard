@@ -46,7 +46,35 @@ Open with ⌘, or from the menu bar icon.
 
 j, k, l and c don't start a search; type / first.
 
+## Build from source
+
+Requires macOS 15 and Xcode (the full app, not only the Command Line Tools).
+
+```sh
+git clone git@github.com:jonasheinrich/Cliphoard.git
+cd Cliphoard
+make install
+```
+
+This builds a release version, copies it to `/Applications` (set `INSTALL_DIR` to
+change that) and launches it. On first launch it adds itself as a login item;
+turn that off in the menu bar menu. To update, run `git pull && make install`.
+
+Each build has a new local signature, so after an update macOS asks once whether
+Cliphoard may use its keychain key; choose "Always Allow".
+
+`make uninstall` removes the app and its login item, and prints how to delete the
+history and settings as well.
+
 ## Development
 
-Requires Xcode and macOS 15. `scripts/dev.sh` builds the app, launches it in the
-background and rebuilds and relaunches on every change.
+| Command      | What it does                                                  |
+| ------------ | ------------------------------------------------------------- |
+| `make build` | Release build into `build/`                                   |
+| `make run`   | Debug build, launched once                                    |
+| `make dev`   | Debug build that rebuilds and relaunches on every change (`scripts/dev.sh`) |
+| `make clean` | Delete `build/`                                               |
+
+`make dev` keeps running until Ctrl-C and launches the app in the background.
+With `fswatch` installed (`brew install fswatch`) it reacts to changes instantly
+instead of polling.

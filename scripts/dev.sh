@@ -11,12 +11,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PROJECT="Cliphoard.xcodeproj"
-SCHEME="Cliphoard"
-DERIVED="$ROOT/build/DerivedData"
-APP="$DERIVED/Build/Products/Debug/Cliphoard.app"
+APP="$ROOT/build/DerivedData/Build/Products/Debug/Cliphoard.app"
 EXECUTABLE="$APP/Contents/MacOS/Cliphoard"
-WATCH_PATHS=("Cliphoard" "$PROJECT")
+WATCH_PATHS=("Cliphoard" "Cliphoard.xcodeproj")
 POLL_INTERVAL=0.5
 
 log() { printf '\033[1;34m[dev]\033[0m %s %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -24,14 +21,8 @@ log() { printf '\033[1;34m[dev]\033[0m %s %s\n' "$(date +%H:%M:%S)" "$*"; }
 build() {
     log "Building…"
     local start=$SECONDS
-    xcodebuild -quiet \
-        -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
-        -destination "platform=macOS,arch=$(uname -m)" \
-        -derivedDataPath "$DERIVED" build 2>&1 \
-        | grep -E '^[^ ]+:[0-9]+:[0-9]+: (error|warning):|^\*\* BUILD' \
-        | awk '!seen[$0]++'
-    # Use xcodebuild's exit code, not grep's.
-    local status=${PIPESTATUS[0]}
+    "$ROOT/scripts/build.sh" Debug
+    local status=$?
     if [ "$status" -eq 0 ]; then
         log "Build succeeded in $((SECONDS - start))s"
     else
