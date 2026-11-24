@@ -14,9 +14,15 @@ final class ClipboardMonitor: ClipboardMonitoring {
     var maxItems: Int {
         didSet { enforceLimit() }
     }
+    var detectSecretsByContent: Bool {
+        didSet {
+            if detectSecretsByContent { detectExistingSecrets() }
+        }
+    }
 
     private let pasteboard: NSPasteboard
     private let store: ClipboardStore?
+    private let cipher: SecretCipher
     private var lastChangeCount: Int
     private var pollTask: Task<Void, Never>?
     /// Newest text regardless of the filter, for skipping repeats.
@@ -28,21 +34,28 @@ final class ClipboardMonitor: ClipboardMonitoring {
     init(
         pasteboard: NSPasteboard = .general,
         store: ClipboardStore? = nil,
-        maxItems: Int = HistoryLimit.current
+        cipher: SecretCipher = SecretCipher(),
+        maxItems: Int = HistoryLimit.current,
+        detectSecretsByContent: Bool = SecretDetector.detectsByContent
     ) {
         self.pasteboard = pasteboard
         self.store = store
+        self.cipher = cipher
         self.maxItems = maxItems
+        self.detectSecretsByContent = detectSecretsByContent
         // Start at -1 so the first check always reads the current contents.
         self.lastChangeCount = -1
 
         do {
-            latestText = try store?.items(limit: 1).first?.text
+            latestText = try store?.items(limit: 1).first.flatMap(reveal)
             apps = try store?.sourceApps() ?? []
         } catch {
             print("Could not read clipboard history: \(error)")
         }
         enforceLimit()
+        if detectSecretsByContent, SecretDetector.scannedVersion != SecretDetector.contentCheckVersion {
+            detectExistingSecrets()
+        }
         loadNextPage()
     }
 
@@ -70,19 +83,52 @@ final class ClipboardMonitor: ClipboardMonitoring {
     }
 
     func copy(_ item: ClipboardItem) {
+        guard let text = reveal(item) else { return }
         pasteboard.clearContents()
-        pasteboard.setString(item.text, forType: .string)
+        pasteboard.setString(text, forType: .string)
+        if item.isSecret {
+            // Tells other clipboard tools not to show or keep it.
+            pasteboard.setData(Data(), forType: SecretDetector.concealedType)
+        }
         // Mark our own write as seen, otherwise polling would record it with
         // Cliphoard (the frontmost app) as the source.
         lastChangeCount = pasteboard.changeCount
 
-        guard item.text != latestText else { return }
-        record(ClipboardItem(
-            text: item.text,
-            copiedAt: .now,
-            sourceAppName: item.sourceAppName,
-            sourceBundleID: item.sourceBundleID
-        ))
+        guard text != latestText else { return }
+        record(text, sourceAppName: item.sourceAppName, sourceBundleID: item.sourceBundleID, isSecret: item.isSecret)
+    }
+
+    func reveal(_ item: ClipboardItem) -> String? {
+        guard item.isSecret else { return item.text }
+        guard let ciphertext = item.ciphertext else { return nil }
+        do {
+            return try cipher.decrypt(ciphertext)
+        } catch {
+            print("Could not decrypt secret: \(error)")
+            return nil
+        }
+    }
+
+    @discardableResult
+    func setSecret(_ item: ClipboardItem, _ isSecret: Bool) -> ClipboardItem? {
+        guard item.isSecret != isSecret, let id = item.id, let text = reveal(item) else { return nil }
+        var updated: ClipboardItem
+        do {
+            if isSecret {
+                let ciphertext = try cipher.encrypt(text)
+                try store?.makeSecret(id: id, ciphertext: ciphertext, byUser: true)
+                store?.checkpoint()
+                updated = item.with(text: "", isSecret: true, ciphertext: ciphertext)
+            } else {
+                try store?.makePlain(id: id, text: text)
+                updated = item.with(text: text, isSecret: false, ciphertext: nil)
+            }
+        } catch {
+            print("Could not change secret: \(error)")
+            return nil
+        }
+        replace(updated)
+        return updated
     }
 
     func historyCount() -> Int {
@@ -127,16 +173,38 @@ final class ClipboardMonitor: ClipboardMonitoring {
         // frontmost one. On the first check the text predates our launch, so
         // there's no guess.
         let app = isFirstCheck ? nil : NSWorkspace.shared.frontmostApplication
-        record(ClipboardItem(
+        let verdict = SecretDetector.verdict(
             text: text,
-            copiedAt: .now,
+            types: pasteboard.types ?? [],
+            sourceBundleID: app?.bundleIdentifier,
+            byContent: detectSecretsByContent
+        )
+        guard verdict != .skip else { return }
+        record(
+            text,
             sourceAppName: app?.localizedName,
-            sourceBundleID: app?.bundleIdentifier
-        ))
+            sourceBundleID: app?.bundleIdentifier,
+            isSecret: verdict == .secret
+        )
     }
 
-    private func record(_ newItem: ClipboardItem) {
-        var item = newItem
+    private func record(_ text: String, sourceAppName: String?, sourceBundleID: String?, isSecret: Bool) {
+        var item = ClipboardItem(
+            text: text,
+            copiedAt: .now,
+            sourceAppName: sourceAppName,
+            sourceBundleID: sourceBundleID
+        )
+        if isSecret {
+            do {
+                item = item.with(text: "", isSecret: true, ciphertext: try cipher.encrypt(text))
+            } catch {
+                // Better to lose it than to store a secret in plain text.
+                print("Could not encrypt secret: \(error)")
+                latestText = text
+                return
+            }
+        }
         do {
             if let store { item = try store.insert(item) }
         } catch {
@@ -148,7 +216,7 @@ final class ClipboardMonitor: ClipboardMonitoring {
             unsavedItems.insert(item, at: 0)
         }
 
-        latestText = item.text
+        latestText = text
         countForSourceApp(item)
         if filter.matches(item) {
             items.insert(item, at: 0)
@@ -175,6 +243,35 @@ final class ClipboardMonitor: ClipboardMonitoring {
         } catch {
             print("Could not limit clipboard history: \(error)")
         }
+    }
+
+    /// Runs the content check over items saved before it existed, with an
+    /// older version of it, or while it was off. Items the user marked or
+    /// unmarked are left alone.
+    private func detectExistingSecrets() {
+        guard let store else { return }
+        do {
+            var changed: [Int64: Data] = [:]
+            for (id, text) in try store.unreviewedPlainItems() where SecretDetector.looksLikePassword(text) {
+                let ciphertext = try cipher.encrypt(text)
+                try store.makeSecret(id: id, ciphertext: ciphertext, byUser: false)
+                changed[id] = ciphertext
+            }
+            SecretDetector.scannedVersion = SecretDetector.contentCheckVersion
+            guard !changed.isEmpty else { return }
+            store.checkpoint()
+            items = items.map { item in
+                guard let id = item.id, let ciphertext = changed[id] else { return item }
+                return item.with(text: "", isSecret: true, ciphertext: ciphertext)
+            }
+        } catch {
+            print("Could not detect secrets: \(error)")
+        }
+    }
+
+    private func replace(_ item: ClipboardItem) {
+        if let index = items.firstIndex(where: { $0.id == item.id }) { items[index] = item }
+        if let index = unsavedItems.firstIndex(where: { $0.id == item.id }) { unsavedItems[index] = item }
     }
 
     private func countForSourceApp(_ item: ClipboardItem) {

@@ -48,6 +48,11 @@ nonisolated enum DatabaseCreator {
             guard sqlite3_exec(db, "PRAGMA journal_mode = WAL", nil, nil, nil) == SQLITE_OK else {
                 throw CreatorError(description: "enable WAL: \(String(cString: sqlite3_errmsg(db)))")
             }
+            // Overwrites deleted content, so plaintext replaced by a secret's
+            // ciphertext doesn't stay in free pages.
+            guard sqlite3_exec(db, "PRAGMA secure_delete = ON", nil, nil, nil) == SQLITE_OK else {
+                throw CreatorError(description: "enable secure delete: \(String(cString: sqlite3_errmsg(db)))")
+            }
             try migrator.migrate(db)
         } catch {
             sqlite3_close(db)

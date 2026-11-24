@@ -6,6 +6,7 @@ struct CliphoardApp: App {
 
     private let monitor = ClipboardMonitor(store: Self.openStore())
     private let hotKeys = GlobalHotKeyController()
+    private let vault = SecretVault()
 
     init() {
         monitor.start()
@@ -14,7 +15,7 @@ struct CliphoardApp: App {
 
     var body: some Scene {
         Window("Cliphoard", id: Self.mainWindowID) {
-            ContentView(monitor: monitor)
+            ContentView(monitor: monitor, vault: vault)
                 .showsAppInDock()
         }
         .windowToolbarStyle(.unified)

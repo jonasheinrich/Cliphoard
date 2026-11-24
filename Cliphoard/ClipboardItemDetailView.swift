@@ -2,7 +2,10 @@ import SwiftUI
 
 struct ClipboardItemDetailView: View {
     let item: ClipboardItem
+    /// The decrypted text of a secret.
+    var revealedText: String? = nil
     var onCopy: () -> Void = {}
+    var onToggleSecret: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isFocused: Bool
@@ -29,7 +32,7 @@ struct ClipboardItemDetailView: View {
             }
 
             ScrollView {
-                Text(item.text)
+                Text(text)
                     .font(.body.monospaced())
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,6 +47,12 @@ struct ClipboardItemDetailView: View {
         .padding()
         .navigationTitle(item.sourceAppName ?? "Clipboard item")
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: onToggleSecret) {
+                    Image(systemName: item.isSecret ? "lock.fill" : "lock.open")
+                }
+                .help(item.isSecret ? "Secret: click to show it in the list again" : "Mark as secret")
+            }
             ToolbarItem(placement: .primaryAction) {
                 CopyButton(isCopied: isCopied, action: copy)
             }
@@ -74,9 +83,13 @@ struct ClipboardItemDetailView: View {
         }
     }
 
+    private var text: String {
+        revealedText ?? item.text
+    }
+
     private var summary: String {
-        let characters = item.text.count
-        let lines = item.text.split(separator: "\n", omittingEmptySubsequences: false).count
+        let characters = text.count
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
         return "\(characters) characters · \(lines) \(lines == 1 ? "line" : "lines")"
     }
 }

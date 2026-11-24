@@ -21,6 +21,7 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
     }
 
     private var allItems: [ClipboardItem]
+    private var secretTexts: [Int64: String] = [:]
     private let pageSize: Int
     private var matchingItems: [ClipboardItem] { allItems.filter(filter.matches) }
 
@@ -53,11 +54,28 @@ final class PreviewClipboardMonitor: ClipboardMonitoring {
         if filter.matches(copy) { items.insert(copy, at: 0) }
     }
 
+    func reveal(_ item: ClipboardItem) -> String? {
+        guard item.isSecret else { return item.text }
+        return item.id.flatMap { secretTexts[$0] } ?? ClipboardItem.sampleSecret
+    }
+
+    @discardableResult
+    func setSecret(_ item: ClipboardItem, _ isSecret: Bool) -> ClipboardItem? {
+        guard item.isSecret != isSecret, let id = item.id, let text = reveal(item) else { return nil }
+        secretTexts[id] = text
+        let updated = item.with(text: isSecret ? "" : text, isSecret: isSecret, ciphertext: nil)
+        if let index = allItems.firstIndex(where: { $0.id == id }) { allItems[index] = updated }
+        if let index = items.firstIndex(where: { $0.id == id }) { items[index] = updated }
+        return updated
+    }
+
     func start() {}
     func stop() {}
 }
 
 extension ClipboardItem {
+    static let sampleSecret = "c0rrect-Horse-Battery!"
+
     static func samples(count: Int) -> [ClipboardItem] {
         let now = Date.now
         let handWritten: [(String, TimeInterval, String?, String?)] = [
@@ -71,6 +89,7 @@ extension ClipboardItem {
                 repeating: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
                 count: 20
             ).joined(separator: " "), 3 * 3600, "Terminal", "com.apple.Terminal"),
+            ("", 4 * 3600, "1Password", "com.1password.1password"),
             ("copied via pbcopy", 2 * 86400, nil, nil),
         ]
         let apps = [
@@ -86,7 +105,8 @@ extension ClipboardItem {
                 let (text, age, appName, bundleID) = handWritten[index]
                 return ClipboardItem(
                     id: id, text: text, copiedAt: now.addingTimeInterval(-age),
-                    sourceAppName: appName, sourceBundleID: bundleID
+                    sourceAppName: appName, sourceBundleID: bundleID,
+                    isSecret: text.isEmpty
                 )
             }
             let app = apps[index % apps.count]

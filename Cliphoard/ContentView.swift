@@ -3,6 +3,7 @@ import AppKit
 
 struct ContentView: View {
     let monitor: any ClipboardMonitoring
+    var vault = SecretVault()
 
     private static let prefetchDistance = 20
 
@@ -65,8 +66,16 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationDestination(for: ClipboardItem.self) { item in
-                ClipboardItemDetailView(item: item) { monitor.copy(item) }
+            .navigationDestination(for: ClipboardItem.self) { pushed in
+                // The pushed value goes stale when the item is (un)marked as
+                // secret, so look up the current one.
+                let item = current(pushed)
+                ClipboardItemDetailView(
+                    item: item,
+                    revealedText: item.isSecret ? monitor.reveal(item) : nil,
+                    onCopy: { copy(item) },
+                    onToggleSecret: { toggleSecret(item) }
+                )
             }
         }
         .frame(minWidth: 400, minHeight: 300)
@@ -81,6 +90,11 @@ struct ContentView: View {
         }
         .onChange(of: path) {
             if path.isEmpty { isListFocused = true }
+        }
+        .onChange(of: vault.unlockedUntil) {
+            if vault.unlockedUntil == nil, path.contains(where: { current($0).isSecret }) {
+                path.removeAll()
+            }
         }
         .task(id: searchText) {
             try? await Task.sleep(for: Self.searchDelay)
@@ -157,7 +171,8 @@ struct ContentView: View {
                             item: item,
                             isSelected: isSelected(item),
                             isCopied: copiedID != nil && item.id == copiedID,
-                            onCopy: { copy(item) }
+                            onCopy: { copy(item) },
+                            onToggleSecret: { toggleSecret(item) }
                         )
                         .onTapGesture { open(item) }
                         .accessibilityAddTraits(.isButton)
@@ -262,10 +277,17 @@ struct ContentView: View {
         return .handled
     }
 
+    private func current(_ item: ClipboardItem) -> ClipboardItem {
+        monitor.items.first { $0.id == item.id } ?? item
+    }
+
     private func copy(_ item: ClipboardItem) {
-        monitor.copy(item)
-        copiedID = item.id
         Task {
+            if item.isSecret {
+                guard await vault.authorize("copy a secret clipboard item") else { return }
+            }
+            monitor.copy(item)
+            copiedID = item.id
             try? await Task.sleep(for: copyFeedbackDuration)
             if copiedID == item.id { copiedID = nil }
         }
@@ -273,7 +295,22 @@ struct ContentView: View {
 
     private func open(_ item: ClipboardItem) {
         selectedID = item.id
-        path.append(item)
+        Task {
+            if item.isSecret {
+                guard await vault.authorize("show a secret clipboard item") else { return }
+            }
+            path.append(item)
+        }
+    }
+
+    private func toggleSecret(_ item: ClipboardItem) {
+        Task {
+            // Unmarking shows the text in the list.
+            if item.isSecret {
+                guard await vault.authorize("show a secret clipboard item in the list") else { return }
+            }
+            monitor.setSecret(item, !item.isSecret)
+        }
     }
 }
 

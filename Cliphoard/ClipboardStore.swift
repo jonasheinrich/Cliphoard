@@ -28,8 +28,8 @@ nonisolated final class ClipboardStore {
     @discardableResult
     func insert(_ item: ClipboardItem) throws -> ClipboardItem {
         let statement = try prepare("""
-            INSERT INTO items (text, copied_at, source_app_name, source_bundle_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO items (text, copied_at, source_app_name, source_bundle_id, is_secret, ciphertext)
+            VALUES (?, ?, ?, ?, ?, ?)
             """)
         defer { sqlite3_finalize(statement) }
 
@@ -37,6 +37,8 @@ nonisolated final class ClipboardStore {
         sqlite3_bind_double(statement, 2, item.copiedAt.timeIntervalSince1970)
         bind(item.sourceAppName, to: 3, in: statement)
         bind(item.sourceBundleID, to: 4, in: statement)
+        sqlite3_bind_int(statement, 5, item.isSecret ? 1 : 0)
+        bind(item.ciphertext, to: 6, in: statement)
 
         guard sqlite3_step(statement) == SQLITE_DONE else { throw lastError("insert") }
 
@@ -78,7 +80,7 @@ nonisolated final class ClipboardStore {
             values += [.double(copiedAt), .double(copiedAt), .int(cursorID)]
         }
 
-        var sql = "SELECT id, text, copied_at, source_app_name, source_bundle_id FROM items"
+        var sql = "SELECT \(Self.itemColumns) FROM items"
         if !conditions.isEmpty {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
@@ -152,8 +154,7 @@ nonisolated final class ClipboardStore {
 
     func oldestItem() throws -> ClipboardItem? {
         let statement = try prepare("""
-            SELECT id, text, copied_at, source_app_name, source_bundle_id
-            FROM items ORDER BY copied_at, id LIMIT 1
+            SELECT \(Self.itemColumns) FROM items ORDER BY copied_at, id LIMIT 1
             """)
         defer { sqlite3_finalize(statement) }
         switch sqlite3_step(statement) {
@@ -162,6 +163,56 @@ nonisolated final class ClipboardStore {
         default: throw lastError("select oldest item")
         }
     }
+
+    /// Plain items detection hasn't looked at since the user last decided.
+    func unreviewedPlainItems() throws -> [(id: Int64, text: String)] {
+        let statement = try prepare("SELECT id, text FROM items WHERE is_secret = 0 AND secret_reviewed = 0")
+        defer { sqlite3_finalize(statement) }
+        var result: [(id: Int64, text: String)] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                result.append((sqlite3_column_int64(statement, 0), string(at: 1, in: statement) ?? ""))
+            case SQLITE_DONE:
+                return result
+            default:
+                throw lastError("select unreviewed items")
+            }
+        }
+    }
+
+    func makeSecret(id: Int64, ciphertext: Data, byUser: Bool) throws {
+        let statement = try prepare("""
+            UPDATE items SET is_secret = 1, ciphertext = ?, text = '',
+                secret_reviewed = secret_reviewed OR ?
+            WHERE id = ?
+            """)
+        defer { sqlite3_finalize(statement) }
+        bind(ciphertext, to: 1, in: statement)
+        sqlite3_bind_int(statement, 2, byUser ? 1 : 0)
+        sqlite3_bind_int64(statement, 3, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw lastError("make secret") }
+    }
+
+    func makePlain(id: Int64, text: String) throws {
+        let statement = try prepare("""
+            UPDATE items SET is_secret = 0, ciphertext = NULL, text = ?, secret_reviewed = 1
+            WHERE id = ?
+            """)
+        defer { sqlite3_finalize(statement) }
+        bind(text, to: 1, in: statement)
+        sqlite3_bind_int64(statement, 2, id)
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw lastError("make plain") }
+    }
+
+    /// Moves the WAL into the database and empties it, so plaintext replaced
+    /// by ciphertext doesn't linger there.
+    func checkpoint() {
+        sqlite3_wal_checkpoint_v2(db, nil, SQLITE_CHECKPOINT_TRUNCATE, nil, nil)
+    }
+
+    private static let itemColumns =
+        "id, text, copied_at, source_app_name, source_bundle_id, is_secret, ciphertext"
 
     private static func escapeLike(_ text: String) -> String {
         text.replacingOccurrences(of: #"\"#, with: #"\\"#)
@@ -209,6 +260,21 @@ nonisolated final class ClipboardStore {
         }
     }
 
+    private func bind(_ value: Data?, to index: Int32, in statement: OpaquePointer) {
+        if let value {
+            _ = value.withUnsafeBytes {
+                sqlite3_bind_blob(statement, index, $0.baseAddress, Int32($0.count), transient)
+            }
+        } else {
+            sqlite3_bind_null(statement, index)
+        }
+    }
+
+    private func data(at index: Int32, in statement: OpaquePointer) -> Data? {
+        guard let bytes = sqlite3_column_blob(statement, index) else { return nil }
+        return Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, index)))
+    }
+
     private func string(at index: Int32, in statement: OpaquePointer) -> String? {
         guard let text = sqlite3_column_text(statement, index) else { return nil }
         return String(cString: text)
@@ -220,7 +286,9 @@ nonisolated final class ClipboardStore {
             text: string(at: 1, in: statement) ?? "",
             copiedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 2)),
             sourceAppName: string(at: 3, in: statement),
-            sourceBundleID: string(at: 4, in: statement)
+            sourceBundleID: string(at: 4, in: statement),
+            isSecret: sqlite3_column_int(statement, 5) != 0,
+            ciphertext: data(at: 6, in: statement)
         )
     }
 

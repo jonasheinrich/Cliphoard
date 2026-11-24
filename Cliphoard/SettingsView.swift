@@ -19,6 +19,7 @@ struct SettingsView: View {
     @AppStorage(HistoryLimit.key) private var maxItems = HistoryLimit.defaultValue
     @State private var draftLimit = HistoryLimit.current
     @State private var pendingLimit: Int?
+    @AppStorage(SecretDetector.byContentKey) private var detectSecretsByContent = true
 
     var body: some View {
         Form {
@@ -27,6 +28,20 @@ struct SettingsView: View {
                     .multilineTextAlignment(.trailing)
                     .onChange(of: draftLimit) { requestLimit(draftLimit) }
                 Text("When the history is full, the oldest items are deleted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Secrets") {
+                Toggle("Detect passwords and tokens by their content", isOn: $detectSecretsByContent)
+                    .onChange(of: detectSecretsByContent) {
+                        monitor.detectSecretsByContent = detectSecretsByContent
+                    }
+                Text("""
+                    Items that password managers mark as concealed or that are copied from them \
+                    are always secrets. Secrets are encrypted, hidden in the list and left out \
+                    of searches; showing or copying one needs Touch ID or your password.
+                    """)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

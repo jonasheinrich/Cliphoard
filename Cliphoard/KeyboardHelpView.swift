@@ -54,7 +54,7 @@ struct KeyboardHelpView: View {
                 }
             }
 
-            Text("j, k, l and c don't start a search; use / first.")
+            Text("j, k, l and c don't start a search; use / first.\nRight-click an item to mark it as secret.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
