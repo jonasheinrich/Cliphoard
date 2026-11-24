@@ -37,14 +37,13 @@ Open with ⌘, or from the menu bar icon.
 |        | → or l or ↩             | Open item                       |
 |        | c                       | Copy item                       |
 |        | esc                     | Clear selection                 |
-|        | / or a letter or number | Search                          |
+|        | / or a letter or number | Search <br>(j, k, l and c don't start a search; type / first.)|
 | Search | ⇥                       | Go to the first result          |
 |        | ⇧⇥ (from the list)      | Back to search                  |
 | Detail | ← or h                  | Back to the list                |
 |        | c                       | Copy item                       |
 | App    | ⌘,                      | Settings                        |
 
-j, k, l and c don't start a search; type / first.
 
 ## Build from source
 
